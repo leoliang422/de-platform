@@ -49,6 +49,27 @@ de-platform/
 
 ## 本地开发
 
+### 一键启动（推荐，SQLite，无需 Docker）
+
+首次需先建后端虚拟环境与装依赖：
+
+```bash
+cd backend && python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && cd ..
+```
+
+之后在仓库根目录直接：
+
+```bash
+./dev.sh            # 启动前后端，保留已有数据
+./dev.sh --fresh    # 重置数据库后启动（清空并重新灌种子）
+```
+
+- 后端 http://localhost:8000（文档 `/docs`）、前端 http://localhost:3000
+- 管理员种子账号：`admin@example.com` / `admin12345`
+- 脚本会自动释放 8000/3000 旧进程、跑迁移、灌幂等种子、按需装前端依赖；按一次 `Ctrl+C` 同时停止前后端。
+
+### 手动方式（含 Docker + Postgres/Redis）
+
 前置：Python 3.11+、Node 20+、Docker（本地 Postgres/Redis）。
 
 ```bash
