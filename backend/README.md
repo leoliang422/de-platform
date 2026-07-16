@@ -23,8 +23,29 @@ docker compose -f ../infra/docker-compose.yml up -d
 # 建表
 alembic upgrade head
 
+# 灌入种子数据（含管理员 admin@example.com / admin12345）
+python -m scripts.seed
+
 # 启动 API（http://localhost:8000，文档 /docs）
 uvicorn app.main:app --reload
+```
+
+### 无 Docker 快速演示（SQLite）
+
+M0–M2 不依赖 Redis（投稿默认同步加工），可用 SQLite 直接跑：
+
+```bash
+export DATABASE_URL="sqlite+aiosqlite:///./dev.db"
+alembic upgrade head && python -m scripts.seed
+uvicorn app.main:app --reload
+```
+
+### 投稿异步加工（生产，可选）
+
+设置 `TASK_QUEUE_ENABLED=true` 后，投稿加工进入 ARQ 队列，需另起 Worker：
+
+```bash
+arq app.workers.main.WorkerSettings
 ```
 
 ## 常用命令
@@ -50,10 +71,26 @@ alembic/      # 迁移
 tests/        # pytest（sqlite 内存库）
 ```
 
-## 已实现（M0）
+## 已实现
 
+### M0 · 鉴权
 - 健康检查 `GET /health`
-- 注册 `POST /auth/register`
-- 登录 `POST /auth/login`（返回 access + refresh token）
-- 刷新 `POST /auth/refresh`
+- 注册 / 登录 / 刷新 `POST /auth/register|login|refresh`
 - 当前用户 `GET /users/me`（需 Bearer token）
+
+### M1 · 内容浏览（只读）
+- 分类树 `GET /categories?section=`
+- 八股 `GET /knowledge`、`GET /knowledge/{id}`
+- SQL `GET /sql-questions`、`GET /sql-questions/{id}`
+- 面经 `GET /companies`、`GET /companies/{id}/interviews`、`GET /interviews/{id}`
+- 项目 `GET /projects`、`GET /projects/{id}`（付费锁定）
+
+### M2 · 投稿 + 大模型加工 + 审核 + 积分
+- 投稿 `POST /submissions`、我的投稿 `GET /submissions/me`
+  - 状态机：`draft → processing → pending_review → published / rejected`
+  - LLM 抽象（`MockLLM` / `DoubaoClient`），无 key 回退 mock
+- 积分 `GET /points/me`（余额 + 账本，发放以 `(ref_type, ref_id)` 幂等）
+- 管理后台（需 `admin` 角色）
+  - 审核队列 `GET /admin/submissions?status=`
+  - 通过 / 驳回 `POST /admin/submissions/{id}/approve|reject`
+  - 分类维护 `GET|POST /admin/categories`、`PATCH|DELETE /admin/categories/{id}`

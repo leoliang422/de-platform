@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import Any
+
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.modules.interview import service as interview_service
+from app.modules.knowledge import service as knowledge_service
+from app.modules.llm.base import LLMClient
+from app.modules.llm.factory import get_llm_client
+from app.modules.points.service import POINTS_BY_TYPE, PointsService
+from app.modules.projects import service as project_service
+from app.modules.sql_bank import service as sql_service
+from app.modules.submissions.models import Submission
+from app.modules.submissions.repository import SubmissionRepository
+from app.modules.submissions.schemas import SubmissionCreate
+
+
+def _extra_from(data: SubmissionCreate) -> dict[str, Any]:
+    # Decimal 不可 JSON 序列化，价格以字符串入库。
+    return {
+        "category_id": data.category_id,
+        "is_paid": data.is_paid,
+        "price_cash": str(data.price_cash) if data.price_cash is not None else None,
+        "price_points": data.price_points,
+        "prompt_md": data.prompt_md,
+        "difficulty": data.difficulty,
+        "tags": data.tags,
+        "company_name": data.company_name,
+        "position": data.position,
+        "level": data.level,
+        "access_type": data.access_type,
+        "implementation_md": data.implementation_md,
+    }
+
+
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message)
+
+
+class SubmissionService:
+    def __init__(self, db: AsyncSession, llm: LLMClient | None = None) -> None:
+        self.db = db
+        self.repo = SubmissionRepository(db)
+        self.llm = llm or get_llm_client()
+
+    async def create(self, user_id: int, data: SubmissionCreate) -> Submission:
+        self._validate(data)
+        submission = Submission(
+            user_id=user_id,
+            target_type=data.target_type,
+            title=data.title,
+            raw_content=data.raw_content,
+            extra=_extra_from(data),
+            status="processing",
+        )
+        self.db.add(submission)
+        await self.db.commit()
+        await self.db.refresh(submission)
+
+        settings = get_settings()
+        if settings.task_queue_enabled:
+            await self._enqueue(submission.id)
+        else:
+            await self._process(submission)
+        return submission
+
+    def _validate(self, data: SubmissionCreate) -> None:
+        if data.target_type == "interview":
+            _require(bool(data.company_name), "面经投稿需填写企业名称")
+            _require(bool(data.position), "面经投稿需填写岗位")
+        if data.target_type == "sql":
+            _require(bool(data.prompt_md), "SQL 投稿需填写题目")
+
+    async def _enqueue(self, submission_id: int) -> None:
+        from arq import create_pool
+        from arq.connections import RedisSettings
+
+        pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+        await pool.enqueue_job("process_submission", submission_id)
+
+    async def _process(self, submission: Submission) -> None:
+        submission.processed_md = await self.llm.format_content(
+            submission.raw_content, submission.target_type
+        )
+        submission.status = "pending_review"
+        await self.db.commit()
+        await self.db.refresh(submission)
+
+    async def approve(self, submission_id: int) -> Submission:
+        submission = await self.repo.get(submission_id)
+        if submission is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投稿不存在")
+        if submission.status != "pending_review":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"当前状态为 {submission.status}，无法审核发布",
+            )
+
+        ref_id = await self._publish(submission)
+        submission.published_ref_id = ref_id
+        submission.status = "published"
+
+        await PointsService(self.db).grant(
+            user_id=submission.user_id,
+            delta=POINTS_BY_TYPE[submission.target_type],
+            reason=f"投稿发布：{submission.target_type}",
+            ref_type="submission",
+            ref_id=submission.id,
+        )
+        await self.db.commit()
+        await self.db.refresh(submission)
+        return submission
+
+    async def reject(self, submission_id: int, reason: str) -> Submission:
+        submission = await self.repo.get(submission_id)
+        if submission is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投稿不存在")
+        if submission.status != "pending_review":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"当前状态为 {submission.status}，无法驳回",
+            )
+        submission.status = "rejected"
+        submission.reject_reason = reason
+        await self.db.commit()
+        await self.db.refresh(submission)
+        return submission
+
+    async def _publish(self, submission: Submission) -> int:
+        extra = submission.extra or {}
+        body = submission.processed_md or submission.raw_content
+        author_id = submission.user_id
+        price_cash = Decimal(extra["price_cash"]) if extra.get("price_cash") is not None else None
+
+        if submission.target_type == "knowledge":
+            item = await knowledge_service.create_published(
+                self.db,
+                title=submission.title,
+                content_md=body,
+                category_id=extra.get("category_id"),
+                is_paid=bool(extra.get("is_paid")),
+                price_cash=price_cash,
+                price_points=extra.get("price_points"),
+                author_id=author_id,
+            )
+            return item.id
+
+        if submission.target_type == "sql":
+            question = await sql_service.create_published(
+                self.db,
+                title=submission.title,
+                prompt_md=extra.get("prompt_md") or "",
+                answer_md=body,
+                difficulty=extra.get("difficulty") or "medium",
+                tags=extra.get("tags") or "",
+                category_id=extra.get("category_id"),
+                author_id=author_id,
+            )
+            return question.id
+
+        if submission.target_type == "interview":
+            post = await interview_service.create_published(
+                self.db,
+                company_name=extra.get("company_name") or "未知企业",
+                position=extra.get("position") or "",
+                content_md=body,
+                author_id=author_id,
+            )
+            return post.id
+
+        project = await project_service.create_published(
+            self.db,
+            title=submission.title,
+            description_md=body,
+            implementation_md=extra.get("implementation_md") or "",
+            level=extra.get("level") or "basic",
+            access_type=extra.get("access_type") or "free",
+            price_cash=price_cash,
+            price_points=extra.get("price_points"),
+            author_id=author_id,
+        )
+        return project.id

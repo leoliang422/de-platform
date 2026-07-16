@@ -75,6 +75,18 @@ export function getMe(accessToken: string): Promise<UserProfile> {
   });
 }
 
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("de_access_token");
+}
+
+function authRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+  return request<T>(path, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) },
+  });
+}
+
 // ---- Catalog ----
 export interface CategoryNode {
   id: number;
@@ -195,4 +207,126 @@ export function getProjectList(): Promise<ProjectListItem[]> {
 
 export function getProjectDetail(id: number): Promise<ProjectDetail> {
   return request<ProjectDetail>(`/projects/${id}`);
+}
+
+// ---- Submissions ----
+export type TargetType = "knowledge" | "sql" | "interview" | "project";
+
+export interface SubmissionCreateInput {
+  target_type: TargetType;
+  title: string;
+  raw_content: string;
+  category_id?: number | null;
+  is_paid?: boolean;
+  price_cash?: string | null;
+  price_points?: number | null;
+  prompt_md?: string | null;
+  difficulty?: string | null;
+  tags?: string | null;
+  company_name?: string | null;
+  position?: string | null;
+  level?: string | null;
+  access_type?: "free" | "paid" | null;
+  implementation_md?: string | null;
+}
+
+export interface Submission {
+  id: number;
+  target_type: string;
+  title: string;
+  status: string;
+  reject_reason: string | null;
+  processed_md: string | null;
+  published_ref_id: number | null;
+  created_at: string;
+}
+
+export function createSubmission(
+  token: string,
+  input: SubmissionCreateInput,
+): Promise<Submission> {
+  return authRequest<Submission>("/submissions", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getMySubmissions(token: string): Promise<Submission[]> {
+  return authRequest<Submission[]>("/submissions/me", token);
+}
+
+// ---- Points ----
+export interface LedgerEntry {
+  id: number;
+  delta: number;
+  reason: string;
+  ref_type: string;
+  ref_id: number;
+  created_at: string;
+}
+
+export interface PointsOverview {
+  balance: number;
+  ledger: LedgerEntry[];
+}
+
+export function getMyPoints(token: string): Promise<PointsOverview> {
+  return authRequest<PointsOverview>("/points/me", token);
+}
+
+// ---- Admin ----
+export interface AdminSubmission extends Submission {
+  user_id: number;
+  raw_content: string;
+  extra: Record<string, unknown>;
+}
+
+export function adminListSubmissions(
+  token: string,
+  status = "pending_review",
+): Promise<AdminSubmission[]> {
+  return authRequest<AdminSubmission[]>(`/admin/submissions?status=${status}`, token);
+}
+
+export function adminApprove(token: string, id: number): Promise<Submission> {
+  return authRequest<Submission>(`/admin/submissions/${id}/approve`, token, {
+    method: "POST",
+  });
+}
+
+export function adminReject(token: string, id: number, reason: string): Promise<Submission> {
+  return authRequest<Submission>(`/admin/submissions/${id}/reject`, token, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export interface CategoryFlat {
+  id: number;
+  parent_id: number | null;
+  section: string;
+  name: string;
+  slug: string;
+  order: number;
+}
+
+export function adminListCategories(
+  token: string,
+  section: string,
+): Promise<CategoryFlat[]> {
+  return authRequest<CategoryFlat[]>(`/admin/categories?section=${section}`, token);
+}
+
+export function adminCreateCategory(
+  token: string,
+  input: { section: string; name: string; slug: string; parent_id?: number | null; order?: number },
+): Promise<CategoryFlat> {
+  return authRequest<CategoryFlat>("/admin/categories", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminDeleteCategory(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/admin/categories/${id}`, token, { method: "DELETE" });
 }
