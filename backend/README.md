@@ -94,6 +94,11 @@ tests/        # pytest（sqlite 内存库）
   - 审核队列 `GET /admin/submissions?status=`
   - 通过 / 驳回 `POST /admin/submissions/{id}/approve|reject`
   - 分类维护 `GET|POST /admin/categories`、`PATCH|DELETE /admin/categories/{id}`
+  - 内容管理（M3.1，`type` ∈ knowledge|sql|interview|project）
+    - 全状态列表 `GET /admin/content/{type}`、编辑预填 `GET /admin/content/{type}/{id}/detail`
+    - 新建 `POST /admin/content/{type}`（可直接粘贴 Markdown，跳过大模型）
+    - 编辑 `PATCH /admin/content/{type}/{id}`（含 `status` 上下架：published ↔ draft）
+    - 删除 `DELETE /admin/content/{type}/{id}`
 
 ### M3 · 支付骨架 + 付费解锁
 - 解锁 `POST /payment/unlock`（`{content_type, content_id, method}`，method=cash|points）

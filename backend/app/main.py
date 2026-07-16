@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.modules.admin.content_router import router as admin_content_router
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalog.router import router as catalog_router
@@ -43,3 +44,4 @@ app.include_router(points_router)
 app.include_router(submissions_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
+app.include_router(admin_content_router)

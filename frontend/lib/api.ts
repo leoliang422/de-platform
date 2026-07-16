@@ -37,7 +37,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let detail = `请求失败 (${res.status})`;
     try {
       const body = await res.json();
-      if (body?.detail) detail = body.detail;
+      if (Array.isArray(body?.detail)) {
+        // FastAPI 校验错误：拼成可读文案
+        detail = body.detail
+          .map((e: { loc?: unknown[]; msg?: string }) => {
+            const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : "";
+            return field ? `${field}: ${e.msg}` : e.msg;
+          })
+          .join("；");
+      } else if (typeof body?.detail === "string") {
+        detail = body.detail;
+      }
     } catch {
       // ignore json parse errors
     }
@@ -366,4 +376,62 @@ export function unlockContent(
 
 export function getMyEntitlements(token: string): Promise<Entitlement[]> {
   return authRequest<Entitlement[]>("/payment/entitlements/me", token);
+}
+
+// ---- Admin 内容管理 ----
+export type ContentType = "knowledge" | "sql" | "interview" | "project";
+
+export interface ContentSummary {
+  id: number;
+  title: string;
+  subtitle: string | null;
+  status: string;
+}
+
+export function adminListContent(
+  token: string,
+  type: ContentType,
+): Promise<ContentSummary[]> {
+  return authRequest<ContentSummary[]>(`/admin/content/${type}`, token);
+}
+
+export function adminGetContentDetail(
+  token: string,
+  type: ContentType,
+  id: number,
+): Promise<Record<string, unknown>> {
+  return authRequest<Record<string, unknown>>(`/admin/content/${type}/${id}/detail`, token);
+}
+
+export function adminCreateContent(
+  token: string,
+  type: ContentType,
+  body: Record<string, unknown>,
+): Promise<ContentSummary> {
+  return authRequest<ContentSummary>(`/admin/content/${type}`, token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminUpdateContent(
+  token: string,
+  type: ContentType,
+  id: number,
+  body: Record<string, unknown>,
+): Promise<ContentSummary> {
+  return authRequest<ContentSummary>(`/admin/content/${type}/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminDeleteContent(
+  token: string,
+  type: ContentType,
+  id: number,
+): Promise<void> {
+  return authRequest<void>(`/admin/content/${type}/${id}`, token, {
+    method: "DELETE",
+  });
 }

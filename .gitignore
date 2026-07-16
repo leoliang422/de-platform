@@ -7,6 +7,8 @@
 
 # ---- Python / backend ----
 __pycache__/
+*.db
+*.sqlite3
 *.py[cod]
 .venv/
 venv/
