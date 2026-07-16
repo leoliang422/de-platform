@@ -15,4 +15,5 @@ class KnowledgeListItem(BaseModel):
 
 
 class KnowledgeDetail(KnowledgeListItem):
-    content_md: str
+    locked: bool = False
+    content_md: str | None = None

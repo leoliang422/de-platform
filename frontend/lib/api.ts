@@ -113,7 +113,8 @@ export interface KnowledgeListItem {
 }
 
 export interface KnowledgeDetail extends KnowledgeListItem {
-  content_md: string;
+  locked: boolean;
+  content_md: string | null;
 }
 
 export function getKnowledgeList(categoryId?: number): Promise<KnowledgeListItem[]> {
@@ -121,8 +122,12 @@ export function getKnowledgeList(categoryId?: number): Promise<KnowledgeListItem
   return request<KnowledgeListItem[]>(`/knowledge${q}`);
 }
 
-export function getKnowledgeDetail(id: number): Promise<KnowledgeDetail> {
-  return request<KnowledgeDetail>(`/knowledge/${id}`);
+function maybeAuth(token?: string | null): RequestInit {
+  return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+}
+
+export function getKnowledgeDetail(id: number, token?: string | null): Promise<KnowledgeDetail> {
+  return request<KnowledgeDetail>(`/knowledge/${id}`, maybeAuth(token));
 }
 
 // ---- SQL ----
@@ -205,8 +210,8 @@ export function getProjectList(): Promise<ProjectListItem[]> {
   return request<ProjectListItem[]>("/projects");
 }
 
-export function getProjectDetail(id: number): Promise<ProjectDetail> {
-  return request<ProjectDetail>(`/projects/${id}`);
+export function getProjectDetail(id: number, token?: string | null): Promise<ProjectDetail> {
+  return request<ProjectDetail>(`/projects/${id}`, maybeAuth(token));
 }
 
 // ---- Submissions ----
@@ -329,4 +334,36 @@ export function adminCreateCategory(
 
 export function adminDeleteCategory(token: string, id: number): Promise<void> {
   return authRequest<void>(`/admin/categories/${id}`, token, { method: "DELETE" });
+}
+
+// ---- Payment / Entitlements ----
+export type PayableType = "project" | "knowledge";
+export type UnlockMethod = "cash" | "points";
+
+export interface Entitlement {
+  id: number;
+  content_type: string;
+  content_id: number;
+  source: string;
+  created_at: string;
+}
+
+export interface UnlockResult {
+  entitlement: Entitlement;
+  balance: number;
+  already_unlocked: boolean;
+}
+
+export function unlockContent(
+  token: string,
+  input: { content_type: PayableType; content_id: number; method: UnlockMethod },
+): Promise<UnlockResult> {
+  return authRequest<UnlockResult>("/payment/unlock", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getMyEntitlements(token: string): Promise<Entitlement[]> {
+  return authRequest<Entitlement[]>("/payment/entitlements/me", token);
 }

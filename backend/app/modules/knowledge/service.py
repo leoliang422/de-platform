@@ -5,6 +5,14 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.knowledge.models import KnowledgeItem
+from app.modules.knowledge.repository import KnowledgeRepository
+
+
+async def get_published(db: AsyncSession, item_id: int) -> KnowledgeItem | None:
+    item = await KnowledgeRepository(db).get(item_id)
+    if item is None or item.status != "published":
+        return None
+    return item
 
 
 async def create_published(

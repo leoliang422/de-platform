@@ -94,6 +94,16 @@ async def seed() -> None:
                         "- 宽依赖：涉及 shuffle，是 Stage 划分边界\n"
                     ),
                 ),
+                KnowledgeItem(
+                    category_id=spark_core.id,
+                    title="Spark 调优体系（付费）",
+                    content_md=(
+                        "## 调优全景\n\n资源、并行度、shuffle、数据倾斜、AQE 全链路调优清单……\n"
+                    ),
+                    is_paid=True,
+                    price_cash=Decimal("9.90"),
+                    price_points=200,
+                ),
             ]
         )
 
