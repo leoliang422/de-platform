@@ -13,21 +13,44 @@ import asyncio
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.models  # noqa: F401  (register models)
 from app.core.database import SessionLocal
+from app.core.security import hash_password
 from app.modules.catalog.models import Category
 from app.modules.interview.models import Company, InterviewPost
 from app.modules.knowledge.models import KnowledgeItem
 from app.modules.projects.models import Project, ProjectQA
 from app.modules.sql_bank.models import SqlQuestion
+from app.modules.users.models import User
+
+ADMIN_EMAIL = "admin@example.com"
+ADMIN_PASSWORD = "admin12345"
+
+
+async def _ensure_admin(db: AsyncSession) -> None:
+    existing = await db.scalar(select(User).where(User.email == ADMIN_EMAIL))
+    if existing is None:
+        db.add(
+            User(
+                email=ADMIN_EMAIL,
+                password_hash=hash_password(ADMIN_PASSWORD),
+                nickname="管理员",
+                role="admin",
+            )
+        )
+        await db.commit()
+        print(f"已创建管理员账号：{ADMIN_EMAIL} / {ADMIN_PASSWORD}")
 
 
 async def seed() -> None:
     async with SessionLocal() as db:
+        await _ensure_admin(db)
+
         existing = await db.scalar(select(func.count()).select_from(Category))
         if existing:
-            print(f"已存在 {existing} 个分类，跳过种子灌入。")
+            print(f"已存在 {existing} 个分类，跳过内容种子灌入。")
             return
 
         # --- 分类树（八股） ---

@@ -18,9 +18,26 @@ export function Navbar() {
             <span className="text-slate-400">…</span>
           ) : user ? (
             <>
-              <span className="text-slate-600">
+              <Link
+                href="/submit"
+                className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"
+              >
+                投稿
+              </Link>
+              {user.role === "admin" && (
+                <Link
+                  href="/admin"
+                  className="rounded-md px-3 py-1.5 text-brand-600 hover:bg-slate-100"
+                >
+                  管理
+                </Link>
+              )}
+              <Link
+                href="/me"
+                className="text-slate-600 hover:text-slate-900"
+              >
                 {user.nickname} · {user.points_balance} 积分
-              </span>
+              </Link>
               <button
                 onClick={logout}
                 className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"
