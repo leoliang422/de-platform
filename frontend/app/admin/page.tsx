@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { ContentManager } from "@/components/content-manager";
 import { PageHeader, Prose } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
 import {
@@ -73,7 +74,7 @@ function AdminInner() {
 
   return (
     <div>
-      <PageHeader title="管理后台" desc="审核投稿、维护分类" />
+      <PageHeader title="管理后台" desc="审核投稿、管理内容、维护分类" />
 
       <h2 className="mb-3 text-lg font-semibold text-slate-900">审核队列</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -108,6 +109,8 @@ function AdminInner() {
           ))}
         </div>
       )}
+
+      <ContentManager />
 
       <CategoryManager />
     </div>
