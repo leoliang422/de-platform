@@ -8,8 +8,15 @@
 - 后端 API 运行中（默认 `http://localhost:8000`）
 
 > 安装依赖统一用 `npm install`（不要用 `npm ci`）：`eslint-config-next` 传递依赖
-> `unrs-resolver` 的平台原生绑定在 lockfile 中是无版本的桩条目，`npm ci` 会跨平台报
-> `Invalid Version`。`npm install` 会按当前平台正确解析。
+> `unrs-resolver` 的平台原生绑定会被 npm 写成**无 version 的桩条目**，导致跨平台
+> `npm ci` / `npm install` 报 `Invalid Version`。仓库里的 lockfile 已剥离这些桩条目。
+>
+> ⚠️ 若你在本机 `npm install` 后发现 `package-lock.json` 里又冒出无 version 的
+> `@unrs/resolver-binding-*` 条目，请在提交前剥离它们（否则会再次弄挂 CI）：
+>
+> ```bash
+> node -e "const fs=require('fs');const p='package-lock.json';const d=JSON.parse(fs.readFileSync(p));for(const k of Object.keys(d.packages))if(d.packages[k].version===undefined&&d.packages[k].optional)delete d.packages[k];fs.writeFileSync(p,JSON.stringify(d,null,2)+'\n')"
+> ```
 
 ## 快速开始
 
