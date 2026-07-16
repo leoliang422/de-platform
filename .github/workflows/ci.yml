@@ -57,10 +57,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        # 使用 npm install 而非 npm ci：eslint-config-next 传递依赖 unrs-resolver 的
-        # 平台原生 optional 绑定在 lockfile 中会被记录为无 version 的桩条目，导致
-        # npm ci 在其他平台报 "Invalid Version"。npm install 会按当前平台正确解析。
-        run: npm install --no-audit --no-fund
+        # 本地开发使用 ByteDance 内网镜像(bnpm.byted.org)，其 URL 会写进 lockfile，
+        # 公有 GitHub Runner 无法访问；同时 unrs-resolver 的平台原生 optional 绑定在
+        # lockfile 中是无 version 的桩条目。因此 CI 丢弃本地 lockfile，改用公有 registry
+        # 从 package.json 语义化范围重新解析安装。
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund --registry=https://registry.npmjs.org/
 
       - name: Lint
         run: npm run lint
