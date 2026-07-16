@@ -33,20 +33,40 @@
 - 异步队列：ARQ + Redis（Upstash）
 - 大模型：豆包（火山方舟 Ark，OpenAI 兼容），`LLMClient` 抽象，无 key 回退 `MockLLM`
 
-## 目录结构（规划）
+## 目录结构
 
 ```
 de-platform/
-  frontend/   # Next.js（后续里程碑落地）
-  backend/    # FastAPI（后续里程碑落地）
-  infra/      # docker-compose、部署脚本、CI（后续里程碑落地）
-  docs/       # 规格 + 过程文档（当前阶段）
+  frontend/   # Next.js (App Router, TS) + Tailwind
+  backend/    # FastAPI（模块化单体）+ SQLAlchemy + Alembic
+  infra/      # docker-compose、部署脚本
+  docs/       # 规格 + 过程文档
 ```
 
 ## 当前状态
 
-📄 **文档先行阶段**：先沉淀规格与协作规范，代码工程骨架在 M0 里程碑落地。详见 [docs/roadmap.md](docs/roadmap.md)。
+✅ **M0 · 工程脚手架 + 鉴权跑通**：后端注册/登录/JWT + 用户接口（含 pytest），前端首页/登录/注册 + 鉴权态，CI（后端 ruff+mypy+pytest，前端 eslint+tsc+build）。详见 [docs/roadmap.md](docs/roadmap.md)。
 
-## 本地开发（待 M0 后补充）
+## 本地开发
 
-初始化脚本、`docker-compose`、一键启动说明将在工程骨架落地后写入本节。
+前置：Python 3.11+、Node 20+、Docker（本地 Postgres/Redis）。
+
+```bash
+# 1. 启动依赖服务
+docker compose -f infra/docker-compose.yml up -d
+
+# 2. 后端（http://localhost:8000，文档 /docs）
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp ../.env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload
+
+# 3. 前端（http://localhost:3000）
+cd ../frontend
+npm install
+npm run dev
+```
+
+各子项目详细说明见 [backend/README.md](backend/README.md)、[frontend/README.md](frontend/README.md)、[infra/README.md](infra/README.md)。
