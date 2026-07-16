@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Node.js 20+
+- Node.js 24（见 `.nvmrc`；lockfile 由 npm 11 生成，`npm ci` 需 npm 11 / Node 24）
 - 后端 API 运行中（默认 `http://localhost:8000`）
 
 ## 快速开始
