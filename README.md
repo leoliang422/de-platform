@@ -45,7 +45,12 @@ de-platform/
 
 ## 当前状态
 
-✅ **M0 · 工程脚手架 + 鉴权跑通**：后端注册/登录/JWT + 用户接口（含 pytest），前端首页/登录/注册 + 鉴权态，CI（后端 ruff+mypy+pytest，前端 eslint+tsc+build）。详见 [docs/roadmap.md](docs/roadmap.md)。
+✅ 已完成 **M0–M3.1**：鉴权、四板块内容浏览、投稿+大模型加工(抽象)+审核、积分、支付骨架+付费解锁、管理员内容管理。
+🚀 **M4 上线**：生产化改造 + 部署配置已就绪，按 [docs/deployment.md](docs/deployment.md)（Vercel + Render + Neon）即可上线。详见 [docs/roadmap.md](docs/roadmap.md)。
+
+## 部署上线
+
+一键化配置已备好（`render.yaml` / `backend/start.sh` / `frontend/vercel.json`）。完整点击流程见 **[docs/deployment.md](docs/deployment.md)**：Neon 建库 → Render 蓝图部署后端 → Vercel 部署前端 → 回填 CORS 联调。本次默认大模型/支付为 mock，投稿同步加工（无需 Redis）；真实能力均可只改环境变量切换。
 
 ## 本地开发
 

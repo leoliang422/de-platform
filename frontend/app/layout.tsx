@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { Footer } from "@/components/footer";
 import { Navbar } from "@/components/navbar";
 import { AuthProvider } from "@/lib/auth";
 
@@ -15,10 +16,11 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen bg-slate-50 text-slate-900">
+      <body className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
         <AuthProvider>
           <Navbar />
-          <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10">{children}</main>
+          <Footer />
         </AuthProvider>
       </body>
     </html>

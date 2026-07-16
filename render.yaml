@@ -1,0 +1,38 @@
+# Render 蓝图（Infrastructure as Code）。
+# 在 Render 控制台 New + → "Blueprint" 选中本仓库即可按此创建后端服务。
+# 数据库使用外部 Neon Postgres：部署后在服务的 Environment 里填 DATABASE_URL / CORS_ORIGINS。
+services:
+  - type: web
+    name: de-platform-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -e .
+    startCommand: bash start.sh
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: APP_ENV
+        value: production
+      # JWT 签名密钥：由 Render 自动生成随机值
+      - key: APP_SECRET_KEY
+        generateValue: true
+      # 以下两个为敏感/环境相关，部署后在控制台手动填写：
+      #   DATABASE_URL  = Neon 连接串（postgresql://...?sslmode=require）
+      #   CORS_ORIGINS  = 你的 Vercel 前端域名（逗号分隔，可多个）
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # 首次部署灌种子（含管理员 admin@example.com / admin12345），之后可改为 0
+      - key: SEED_ON_START
+        value: "1"
+      - key: LLM_PROVIDER
+        value: mock
+      - key: PAYMENT_PROVIDER
+        value: mock
+      - key: TASK_QUEUE_ENABLED
+        value: "false"

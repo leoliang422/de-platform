@@ -13,8 +13,13 @@ if config.config_file_name is not None:
 
 
 def _sync_url() -> str:
-    """Alembic runs synchronously; convert async driver URLs to sync ones."""
+    """Alembic runs synchronously; convert async driver URLs to sync ones.
+
+    psycopg(v3) 认识 `sslmode`，故 Neon 的连接串可原样保留查询参数。
+    """
     url = get_settings().database_url
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
     return url.replace("+asyncpg", "+psycopg").replace("+aiosqlite", "")
 
 
