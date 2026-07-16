@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.modules.auth.router import router as auth_router
+from app.modules.catalog.router import router as catalog_router
+from app.modules.interview.router import router as interview_router
+from app.modules.knowledge.router import router as knowledge_router
+from app.modules.projects.router import router as projects_router
+from app.modules.sql_bank.router import router as sql_router
 from app.modules.users.router import router as users_router
 
 settings = get_settings()
@@ -25,3 +30,8 @@ async def health() -> dict[str, str]:
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(catalog_router)
+app.include_router(knowledge_router)
+app.include_router(sql_router)
+app.include_router(interview_router)
+app.include_router(projects_router)

@@ -55,8 +55,9 @@ export default function HomePage() {
 
       <section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         {sections.map((s) => (
-          <div
+          <Link
             key={s.title}
+            href={s.href}
             className="group rounded-xl border border-slate-200 bg-white p-6 transition hover:border-brand-500 hover:shadow-sm"
           >
             <div className="mb-2 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
@@ -65,9 +66,9 @@ export default function HomePage() {
             <h2 className="text-xl font-semibold text-slate-900">{s.title}</h2>
             <p className="mt-2 text-sm text-slate-600">{s.desc}</p>
             <span className="mt-4 inline-block text-sm font-medium text-brand-600">
-              即将上线 →
+              进入 →
             </span>
-          </div>
+          </Link>
         ))}
       </section>
     </div>
