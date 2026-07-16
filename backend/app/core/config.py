@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,16 +25,14 @@ class Settings(BaseSettings):
     doubao_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     doubao_model: str = "doubao-pro-4k"
 
-    # 生产用逗号分隔的字符串配置，例如：
+    # 逗号分隔的允许来源，例如：
     #   CORS_ORIGINS=https://xxx.vercel.app,https://www.example.com
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # 注意：用 str 而非 list[str]，避免 pydantic-settings 把环境变量按 JSON 解析。
+    cors_origins: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _split_cors_origins(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [o.strip() for o in value.split(",") if o.strip()]
-        return value
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache
