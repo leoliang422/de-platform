@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,8 +26,10 @@ from app.modules.projects.models import Project
 from app.modules.sql_bank import service as sql_service
 from app.modules.sql_bank.models import SqlQuestion
 
+_M = TypeVar("_M")
 
-async def _get_or_404(db: AsyncSession, model: type, obj_id: int) -> Any:
+
+async def _get_or_404(db: AsyncSession, model: type[_M], obj_id: int) -> _M:
     obj = await db.get(model, obj_id)
     if obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="内容不存在")
