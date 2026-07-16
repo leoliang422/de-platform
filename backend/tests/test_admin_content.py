@@ -25,9 +25,7 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_admin_knowledge_crud_and_visibility(
-    client: AsyncClient, db: AsyncSession
-) -> None:
+async def test_admin_knowledge_crud_and_visibility(client: AsyncClient, db: AsyncSession) -> None:
     admin_token = await _register_and_login(client, "kadmin@test.io")
     await _promote_admin(db, "kadmin@test.io")
 
@@ -66,9 +64,7 @@ async def test_admin_knowledge_crud_and_visibility(
     assert resp.json()["title"] == "Spark Shuffle 深入"
 
     # 删除
-    resp = await client.delete(
-        f"/admin/content/knowledge/{item_id}", headers=_auth(admin_token)
-    )
+    resp = await client.delete(f"/admin/content/knowledge/{item_id}", headers=_auth(admin_token))
     assert resp.status_code == 204
     resp = await client.get("/admin/content/knowledge", headers=_auth(admin_token))
     assert all(i["id"] != item_id for i in resp.json())
@@ -84,9 +80,7 @@ async def test_admin_content_requires_admin(client: AsyncClient) -> None:
     assert resp.status_code == 403
 
 
-async def test_admin_interview_and_project_create(
-    client: AsyncClient, db: AsyncSession
-) -> None:
+async def test_admin_interview_and_project_create(client: AsyncClient, db: AsyncSession) -> None:
     admin_token = await _register_and_login(client, "iadmin@test.io")
     await _promote_admin(db, "iadmin@test.io")
 

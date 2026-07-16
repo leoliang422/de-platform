@@ -35,6 +35,7 @@ async def _get_or_404(db: AsyncSession, model: type[_M], obj_id: int) -> _M:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="内容不存在")
     return obj
 
+
 router = APIRouter(
     prefix="/admin/content", tags=["admin-content"], dependencies=[Depends(require_admin)]
 )
@@ -53,9 +54,7 @@ async def list_knowledge(db: AsyncSession = Depends(get_db)) -> list[ContentSumm
 
 
 @router.get("/knowledge/{item_id}/detail")
-async def get_knowledge_detail(
-    item_id: int, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def get_knowledge_detail(item_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     item: KnowledgeItem = await _get_or_404(db, KnowledgeItem, item_id)
     return {
         "id": item.id,
@@ -117,9 +116,7 @@ async def list_sql(db: AsyncSession = Depends(get_db)) -> list[ContentSummary]:
 
 
 @router.get("/sql/{question_id}/detail")
-async def get_sql_detail(
-    question_id: int, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def get_sql_detail(question_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     q: SqlQuestion = await _get_or_404(db, SqlQuestion, question_id)
     return {
         "id": q.id,
@@ -178,9 +175,7 @@ async def list_interview(db: AsyncSession = Depends(get_db)) -> list[ContentSumm
 
 
 @router.get("/interview/{post_id}/detail")
-async def get_interview_detail(
-    post_id: int, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def get_interview_detail(post_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     post: InterviewPost = await _get_or_404(db, InterviewPost, post_id)
     company = await db.get(Company, post.company_id)
     return {
@@ -238,9 +233,7 @@ async def list_project(db: AsyncSession = Depends(get_db)) -> list[ContentSummar
 
 
 @router.get("/project/{project_id}/detail")
-async def get_project_detail(
-    project_id: int, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def get_project_detail(project_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     p: Project = await _get_or_404(db, Project, project_id)
     return {
         "id": p.id,
@@ -256,9 +249,7 @@ async def get_project_detail(
 
 
 @router.post("/project", response_model=ContentSummary, status_code=status.HTTP_201_CREATED)
-async def create_project(
-    data: ProjectCreate, db: AsyncSession = Depends(get_db)
-) -> ContentSummary:
+async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)) -> ContentSummary:
     project = await project_service.create_published(
         db,
         title=data.title,
