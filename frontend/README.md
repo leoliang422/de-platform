@@ -4,8 +4,12 @@
 
 ## 环境要求
 
-- Node.js 24（见 `.nvmrc`；lockfile 由 npm 11 生成，`npm ci` 需 npm 11 / Node 24）
+- Node.js 24（见 `.nvmrc`）
 - 后端 API 运行中（默认 `http://localhost:8000`）
+
+> 安装依赖统一用 `npm install`（不要用 `npm ci`）：`eslint-config-next` 传递依赖
+> `unrs-resolver` 的平台原生绑定在 lockfile 中是无版本的桩条目，`npm ci` 会跨平台报
+> `Invalid Version`。`npm install` 会按当前平台正确解析。
 
 ## 快速开始
 
