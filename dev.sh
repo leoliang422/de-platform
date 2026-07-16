@@ -37,11 +37,11 @@ err()  { printf "\033[31m[dev]\033[0m %s\n" "$*" >&2; }
 
 kill_port() {
   local port="$1" pids
-  pids="$(lsof -ti "tcp:$port" 2>/dev/null || true)"
+  pids="$(lsof -ti "tcp:${port}" 2>/dev/null || true)"
   if [ -n "$pids" ]; then
-    log "释放端口 $port（kill ${pids//$'\n'/ }）"
+    log "释放端口 ${port} (kill $(echo ${pids} | tr '\n' ' '))"
     # shellcheck disable=SC2086
-    kill -9 $pids 2>/dev/null || true
+    kill -9 ${pids} 2>/dev/null || true
   fi
 }
 
