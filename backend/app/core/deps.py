@@ -9,6 +9,7 @@ from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 
 bearer_scheme = HTTPBearer(auto_error=True)
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
@@ -25,6 +26,22 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
     return user
+
+
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """匿名可访问的接口用它拿到用户（若已登录），无 token 或无效 token 返回 None。"""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+    except jwt.PyJWTError:
+        return None
+    if payload.get("type") != "access":
+        return None
+    return await UserRepository(db).get_by_id(int(payload["sub"]))
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:

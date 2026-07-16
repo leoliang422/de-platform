@@ -94,3 +94,12 @@ tests/        # pytest（sqlite 内存库）
   - 审核队列 `GET /admin/submissions?status=`
   - 通过 / 驳回 `POST /admin/submissions/{id}/approve|reject`
   - 分类维护 `GET|POST /admin/categories`、`PATCH|DELETE /admin/categories/{id}`
+
+### M3 · 支付骨架 + 付费解锁
+- 解锁 `POST /payment/unlock`（`{content_type, content_id, method}`，method=cash|points）
+  - 现金走 `PaymentProvider`（当前 `MockProvider`）→ 订单 paid → `entitlement(source=purchase)`
+  - 积分校验余额 → 扣分（账本负值）→ `entitlement(source=points)`
+  - 同一内容重复解锁幂等（返回 `already_unlocked`）
+- 已解锁 `GET /payment/entitlements/me`
+- 付费内容访问控制：`GET /projects/{id}`、`GET /knowledge/{id}` 依据 entitlement/作者/管理员返回 `locked`
+- 双标价见 `docs/points-and-payment.md`；种子含付费项目与付费八股各 1 条

@@ -5,6 +5,14 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.projects.models import Project
+from app.modules.projects.repository import ProjectRepository
+
+
+async def get_published(db: AsyncSession, project_id: int) -> Project | None:
+    project = await ProjectRepository(db).get(project_id)
+    if project is None or project.status != "published":
+        return None
+    return project
 
 
 async def create_published(

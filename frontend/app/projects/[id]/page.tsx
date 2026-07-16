@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { getProjectDetail, type ProjectDetail } from "@/lib/api";
+import { UnlockPanel } from "@/components/unlock";
+import { getAccessToken, getProjectDetail, type ProjectDetail } from "@/lib/api";
 
 export default function ProjectDetailPage({
   params,
@@ -14,11 +15,15 @@ export default function ProjectDetailPage({
   const [item, setItem] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getProjectDetail(Number(id))
+  const load = useCallback(() => {
+    getProjectDetail(Number(id), getAccessToken())
       .then(setItem)
       .catch(() => setError("项目不存在或加载失败"));
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div>
@@ -46,15 +51,13 @@ export default function ProjectDetailPage({
           <Prose>{item.description_md}</Prose>
 
           {item.locked ? (
-            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-center">
-              <p className="font-medium text-amber-800">该项目为付费内容</p>
-              <p className="mt-1 text-sm text-amber-700">
-                {item.price_cash != null && `¥${item.price_cash}`}
-                {item.price_cash != null && item.price_points != null && " 或 "}
-                {item.price_points != null && `${item.price_points} 积分`}
-                解锁（购买 / 兑换功能将在后续里程碑上线）
-              </p>
-            </div>
+            <UnlockPanel
+              contentType="project"
+              contentId={item.id}
+              priceCash={item.price_cash}
+              pricePoints={item.price_points}
+              onUnlocked={load}
+            />
           ) : (
             <>
               <h2 className="mb-2 mt-6 text-sm font-semibold text-slate-500">项目实现</h2>
