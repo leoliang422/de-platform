@@ -42,7 +42,12 @@
 - [x] 前端 422 校验错误友好展示
 
 ## M4 · UI 打磨 + 部署演示
-- [ ] UI/交互统一打磨（现代简洁风）
-- [ ] 部署：前端 Vercel、后端/Worker Render/Railway、Neon、Upstash
-- [ ] 端到端演示走查（对齐 spec 第 10 节验收标准）
-- [ ] README 补充本地一键启动 + 部署说明
+- [x] UI 轻量打磨（全局 footer、sticky 布局、metadata）
+- [x] 生产化改造：CORS/密钥 env 化、Neon Postgres（asyncpg+SSL）自动适配、httpx 进运行时依赖
+- [x] 部署配置：`render.yaml`（后端蓝图）+ `backend/start.sh`（迁移+启动）+ `frontend/vercel.json`
+- [x] 部署指南 `docs/deployment.md`（Vercel + Render + Neon 全流程）
+- [x] README 补充本地一键启动（`dev.sh`）+ 部署说明
+- [ ] 实际点击开通三平台并联调（需账号，按 `docs/deployment.md` 执行）
+- [ ] 端到端线上走查（对齐 spec 第 10 节验收标准）
+
+> 本次上线：大模型 `mock`、支付 `mock`、投稿同步加工（无需 Redis）。真实豆包 / 异步队列 / 真实支付均为"改环境变量即可切换"，见 `docs/deployment.md`。
