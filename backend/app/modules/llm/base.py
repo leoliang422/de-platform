@@ -24,14 +24,17 @@ EXTRACT_TEMPLATES: dict[str, str] = {
     ),
     "sql": (
         "你是数据开发面试官。请从用户提供的原始文本中提取多道 SQL 题目，每题一条，包含标题、"
-        "题干(prompt_md)、参考答案(answer_md，若原文没有答案则留空字符串)、难度(difficulty，取 easy/medium/hard)。"
-        '只输出 JSON 数组，格式：[{"title":"","prompt_md":"","answer_md":"","difficulty":"medium"}]。'
+        "题干(prompt_md)、参考答案(answer_md，若原文没有答案则留空字符串)、"
+        "难度(difficulty，取 easy/medium/hard)。只输出 JSON 数组，格式："
+        '[{"title":"","prompt_md":"","answer_md":"","difficulty":"medium"}]。'
         "不要杜撰题目，不要输出 JSON 以外的任何文字。"
     ),
     "interview": (
         "你是面经整理编辑。请从用户提供的原始文本中提取一场面试的信息：企业名(company_name)、"
-        "面试类型(interview_type，取 campus/social/daily/summer)、以及按轮次组织的问答列表(qa_items)，"
-        "每条问答含 section(round1/round2/round3/hr)、question、answer(若原文没有答案则留空字符串)。"
+        "面试类型(interview_type，取 campus/social/daily/summer)、"
+        "以及按轮次组织的问答列表(qa_items)，"
+        "每条问答含 section(round1/round2/round3/hr)、question、"
+        "answer(若原文没有答案则留空字符串)。"
         '只输出 JSON 对象，格式：{"company_name":"","interview_type":"campus",'
         '"qa_items":[{"section":"round1","question":"","answer":""}]}。'
         "不要杜撰内容，不要输出 JSON 以外的任何文字。"
@@ -47,7 +50,7 @@ EXTRACT_TEMPLATES: dict[str, str] = {
 # 答案补全提示：针对单个问题生成参考答案。
 ANSWER_TEMPLATES: dict[str, str] = {
     "knowledge": "你是数据开发领域专家。请针对下面的问题给出准确、简洁的中文 Markdown 参考答案。",
-    "sql": "你是数据开发面试官。请针对下面的 SQL 题目给出解题思路与最终 SQL 代码块（中文 Markdown）。",
+    "sql": "你是数据开发面试官。请针对下面的 SQL 题目给出解题思路与 SQL 代码块（中文）。",
     "interview": "你是资深数据开发面试官。请针对下面的面试问题给出条理清晰的中文参考答案。",
     "project": "你是数据开发项目导师。请针对下面的项目相关问题给出专业的中文参考答案。",
 }
