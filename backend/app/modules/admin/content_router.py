@@ -169,8 +169,8 @@ async def list_interview(db: AsyncSession = Depends(get_db)) -> list[ContentSumm
     return [
         ContentSummary(
             id=p.id,
-            title=p.title or "(无标题)",
-            subtitle=companies.get(p.company_id),
+            title=companies.get(p.company_id) or "(未知企业)",
+            subtitle=p.interview_type,
             status=p.status,
         )
         for p in posts
@@ -184,9 +184,7 @@ async def get_interview_detail(post_id: int, db: AsyncSession = Depends(get_db))
     return {
         "id": post.id,
         "company_name": company.name if company else "",
-        "title": post.title,
         "interview_type": post.interview_type,
-        "content_md": post.content_md,
         "status": post.status,
         "qa_items": [
             {
@@ -206,8 +204,9 @@ async def create_interview(
     post = await interview_service.create_published(
         db,
         company_name=data.company_name,
-        title=data.title,
-        content_md=data.content_md,
+        # 面经无标题：内部标题用企业名。
+        title=data.company_name,
+        content_md="",
         interview_type=data.interview_type,
         qa_items=[q.model_dump() for q in data.qa_items],
         author_id=None,
@@ -216,7 +215,7 @@ async def create_interview(
     await db.commit()
     await db.refresh(post)
     return ContentSummary(
-        id=post.id, title=post.title, subtitle=data.company_name, status=post.status
+        id=post.id, title=data.company_name, subtitle=data.interview_type, status=post.status
     )
 
 
@@ -228,10 +227,16 @@ async def update_interview(
     # qa_items 若提供则整体替换（转成 service 需要的 dict 列表）
     if "qa_items" in fields and fields["qa_items"] is not None:
         fields["qa_items"] = [dict(q) for q in fields["qa_items"]]
+    # company_name 变化时内部标题同步为企业名
+    if fields.get("company_name"):
+        fields["title"] = fields["company_name"]
     post = await interview_service.update(db, post_id, fields)
     companies = {c.id: c.name for c in await InterviewRepository(db).list_companies()}
     return ContentSummary(
-        id=post.id, title=post.title, subtitle=companies.get(post.company_id), status=post.status
+        id=post.id,
+        title=companies.get(post.company_id) or "(未知企业)",
+        subtitle=post.interview_type,
+        status=post.status,
     )
 
 

@@ -16,8 +16,9 @@ class InterviewQAIn(BaseModel):
 
 class SubmissionCreate(BaseModel):
     target_type: TargetType
-    title: str = Field(min_length=1, max_length=200)
-    raw_content: str = Field(min_length=1)
+    # 面经无标题/无正文（整体感受已去掉），标题/正文按类型在 service 层校验。
+    title: str = Field(default="", max_length=200)
+    raw_content: str = Field(default="")
 
     # 通用可选：分类
     category_id: int | None = None

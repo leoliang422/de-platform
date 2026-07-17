@@ -78,6 +78,10 @@ class SubmissionService:
             _require(bool(data.interview_type), "面经投稿需选择类型")
             has_qa = any((q.question.strip() or q.answer.strip()) for q in (data.qa_items or []))
             _require(has_qa, "面经投稿需至少填写一条问答")
+            return
+        # 非面经：需标题与正文
+        _require(bool(data.title.strip()), "投稿需填写标题")
+        _require(bool(data.raw_content.strip()), "投稿需填写正文")
         if data.target_type == "sql":
             _require(bool(data.prompt_md), "SQL 投稿需填写题目")
 
@@ -166,11 +170,12 @@ class SubmissionService:
             ref_type="submission",
             ref_id=submission.id,
         )
+        label = submission.title or (submission.extra or {}).get("company_name") or "你的投稿"
         await NotificationService(self.db).notify(
             user_id=submission.user_id,
             type="submission_approved",
             title="投稿已发布",
-            body=f"你的投稿《{submission.title}》已通过审核并发布。",
+            body=f"你的投稿《{label}》已通过审核并发布。",
             link="/submit",
         )
         await self.db.commit()
@@ -188,11 +193,12 @@ class SubmissionService:
             )
         submission.status = "rejected"
         submission.reject_reason = reason
+        label = submission.title or (submission.extra or {}).get("company_name") or "你的投稿"
         await NotificationService(self.db).notify(
             user_id=submission.user_id,
             type="submission_rejected",
             title="投稿被驳回",
-            body=f"你的投稿《{submission.title}》未通过审核：{reason}",
+            body=f"你的投稿《{label}》未通过审核：{reason}",
             link="/submit",
         )
         await self.db.commit()
@@ -232,11 +238,13 @@ class SubmissionService:
             return question.id
 
         if submission.target_type == "interview":
+            company_name = extra.get("company_name") or "未知企业"
             post = await interview_service.create_published(
                 self.db,
-                company_name=extra.get("company_name") or "未知企业",
-                title=submission.title,
-                content_md=body,
+                company_name=company_name,
+                # 面经已去掉标题与整体感受：内部标题用企业名，正文置空。
+                title=company_name,
+                content_md="",
                 interview_type=extra.get("interview_type"),
                 qa_items=extra.get("qa_items"),
                 author_id=author_id,

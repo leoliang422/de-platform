@@ -61,18 +61,14 @@ class InterviewQAInput(BaseModel):
 
 class InterviewCreate(BaseModel):
     company_name: str
-    title: str
     interview_type: str | None = None  # social | campus | daily | summer
-    content_md: str = ""
     qa_items: list[InterviewQAInput] = []
     status: str = "published"
 
 
 class InterviewUpdate(BaseModel):
     company_name: str | None = None
-    title: str | None = None
     interview_type: str | None = None
-    content_md: str | None = None
     qa_items: list[InterviewQAInput] | None = None
     status: str | None = None
 

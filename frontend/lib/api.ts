@@ -705,6 +705,37 @@ export function adminDeleteCategory(token: string, id: number): Promise<void> {
   return authRequest<void>(`/admin/categories/${id}`, token, { method: "DELETE" });
 }
 
+// ---- Admin 用户管理 ----
+export interface AdminUser {
+  id: number;
+  email: string;
+  nickname: string;
+  role: string;
+  points_balance: number;
+  created_at: string;
+}
+
+export function adminListUsers(token: string, q?: string): Promise<AdminUser[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  return authRequest<AdminUser[]>(`/admin/users${qs}`, token);
+}
+
+export function adminUpdateUser(
+  token: string,
+  id: number,
+  input: {
+    role?: string;
+    set_points?: number;
+    delta_points?: number;
+    reason?: string;
+  },
+): Promise<AdminUser> {
+  return authRequest<AdminUser>(`/admin/users/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 // ---- Payment / Entitlements ----
 export type PayableType = "project" | "knowledge";
 export type UnlockMethod = "cash" | "points";

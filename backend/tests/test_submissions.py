@@ -106,8 +106,6 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
         headers=_auth(user_token),
         json={
             "target_type": "interview",
-            "title": "字节数开一面",
-            "raw_content": "问了数据倾斜和连续登录 SQL。整体体验不错。",
             "company_name": "字节跳动",
             "interview_type": "campus",
             "qa_items": [
@@ -134,7 +132,8 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     campus = next(g for g in groups if g["interview_type"] == "campus")
     assert campus["count"] == 1
     card = campus["posts"][0]
-    assert card["title"] == "字节数开一面"
+    # 面经已去掉标题：内部标题回落为企业名
+    assert card["title"] == "字节跳动"
     assert set(card["rounds_covered"]) == {"round1", "hr"}
     assert card["author_nickname"]  # 作者信息随卡片返回
     assert len(card["qa"]) == 2
