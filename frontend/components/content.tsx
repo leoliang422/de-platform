@@ -1,12 +1,33 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+const IMG_MD_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+
 export function Prose({ children }: { children: string }) {
-  // M1：以等宽预格式化展示 Markdown 原文；富文本渲染留待后续里程碑。
+  // 以预格式化展示 Markdown 原文，并把 ![alt](url) 图片语法渲染为内嵌图片。
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  for (const m of children.matchAll(IMG_MD_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) parts.push(<span key={key++}>{children.slice(last, idx)}</span>);
+    parts.push(
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key={key++}
+        src={m[2]}
+        alt={m[1]}
+        className="my-2 block max-h-[28rem] max-w-full rounded-lg border border-slate-200"
+      />,
+    );
+    last = idx + m[0].length;
+  }
+  if (last < children.length) parts.push(<span key={key++}>{children.slice(last)}</span>);
+
   return (
-    <pre className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-800">
-      {children}
-    </pre>
+    <div className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-800">
+      {parts}
+    </div>
   );
 }
 

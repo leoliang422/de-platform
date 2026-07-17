@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { MarkdownTextarea } from "@/components/markdown-textarea";
 import {
   adminCreateContent,
   adminDeleteContent,
@@ -200,12 +201,13 @@ function InterviewQaEditor({
               placeholder="问题"
               className={`${inputCls} mb-2`}
             />
-            <textarea
+            <MarkdownTextarea
               value={qa.answer}
-              onChange={(e) => update(i, { answer: e.target.value })}
+              onChange={(v) => update(i, { answer: v })}
               placeholder="答案 / 参考回答"
               rows={2}
               className={inputCls}
+              hint={false}
             />
             <button
               type="button"
@@ -502,12 +504,13 @@ function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void
                     className={inputCls}
                   />
                   {type === "knowledge" && (
-                    <textarea
+                    <MarkdownTextarea
                       value={d.content_md}
-                      onChange={(e) => update(i, { content_md: e.target.value })}
+                      onChange={(v) => update(i, { content_md: v })}
                       placeholder="正文（Markdown）"
                       rows={4}
                       className={inputCls}
+                      hint={false}
                     />
                   )}
                   {type === "sql" && (
@@ -549,19 +552,21 @@ function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void
                   )}
                   {type === "project" && (
                     <>
-                      <textarea
+                      <MarkdownTextarea
                         value={d.description_md}
-                        onChange={(e) => update(i, { description_md: e.target.value })}
+                        onChange={(v) => update(i, { description_md: v })}
                         placeholder="项目描述（Markdown）"
                         rows={3}
                         className={inputCls}
+                        hint={false}
                       />
-                      <textarea
+                      <MarkdownTextarea
                         value={d.implementation_md}
-                        onChange={(e) => update(i, { implementation_md: e.target.value })}
+                        onChange={(v) => update(i, { implementation_md: v })}
                         placeholder="实现说明（可选）"
                         rows={2}
                         className={inputCls}
+                        hint={false}
                       />
                     </>
                   )}
@@ -751,9 +756,9 @@ export function ContentManager() {
             <label key={f.name} className="block">
               <span className="mb-1 block text-xs font-medium text-slate-600">{f.label}</span>
               {f.type === "textarea" ? (
-                <textarea
+                <MarkdownTextarea
                   value={values[f.name] as string}
-                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
+                  onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
                   required={f.required}
                   rows={5}
                   className={inputCls}
