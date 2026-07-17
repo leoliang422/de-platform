@@ -50,10 +50,19 @@
 ### 5B 异步队列
 现状：ARQ + Redis Worker 代码已在，默认同步。
 
-- `P0` 接 Upstash Redis；Render 起独立 Worker 服务；`TASK_QUEUE_ENABLED=true`
-- `P0` 投稿加工转异步（提交即 `processing`，Worker 加工后更新）
-- `P1` 失败重试 + 死信；任务：投稿加工、邮件、支付回调后处理、通知扇出
-- 完成标准：投稿提交立即返回，Worker 异步完成并可查询状态。
+**本轮已完成：**
+- [x] 投稿加工逻辑抽成 `SubmissionService.process()`（同步路径与 Worker **共用同一套**，天然幂等：仅处理 `processing` 态）
+- [x] `_dispatch()`：`TASK_QUEUE_ENABLED=true` 时入队，**入队失败自动回退同步加工**（不阻断投稿）
+- [x] `_enqueue()` 正确关闭连接池（`aclose`）；Worker 任务改为委托 `service.process`
+- [x] 加工失败落 **`failed`** 态并记录原因；新增 `POST /submissions/{id}/retry`（作者/管理员）
+- [x] 前端「我的投稿」：processing 轮询刷新、failed 展示原因 + 重试按钮
+- [x] `render.yaml` 备好 worker 服务块（注释式）+ `REDIS_URL`；`deployment.md` 补 Upstash + Worker 开启流程
+- [x] 测试：入队分支/入队失败回退/幂等/失败落态/retry 全覆盖
+
+**待真实 Upstash + Worker 上线时执行（按 deployment.md）：**
+- `P0` 建 Upstash Redis、web+worker 填 `REDIS_URL`、取消注释 worker、置 `TASK_QUEUE_ENABLED=true`（建议升 Starter）
+- `P1` 死信/重试上限；更多任务类型（邮件、支付回调后处理、通知扇出）
+- 完成标准：投稿提交立即返回 `processing`，Worker 异步完成后 `pending_review`，可查询/重试。
 
 ---
 

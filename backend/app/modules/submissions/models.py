@@ -7,8 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 # 状态机：draft → processing → pending_review → published
+#                          ↘ failed（加工异常，可 retry 回 processing）
 #                                     ↘ rejected → (可退回) draft
-STATUSES = ("draft", "processing", "pending_review", "published", "rejected")
+STATUSES = ("draft", "processing", "pending_review", "published", "rejected", "failed")
 TARGET_TYPES = ("knowledge", "sql", "interview", "project")
 
 

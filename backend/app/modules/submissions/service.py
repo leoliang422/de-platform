@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -17,6 +18,9 @@ from app.modules.sql_bank import service as sql_service
 from app.modules.submissions.models import Submission
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import SubmissionCreate
+from app.modules.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 def _extra_from(data: SubmissionCreate) -> dict[str, Any]:
@@ -62,11 +66,8 @@ class SubmissionService:
         await self.db.commit()
         await self.db.refresh(submission)
 
-        settings = get_settings()
-        if settings.task_queue_enabled:
-            await self._enqueue(submission.id)
-        else:
-            await self._process(submission)
+        await self._dispatch(submission.id)
+        await self.db.refresh(submission)
         return submission
 
     def _validate(self, data: SubmissionCreate) -> None:
@@ -76,20 +77,69 @@ class SubmissionService:
         if data.target_type == "sql":
             _require(bool(data.prompt_md), "SQL 投稿需填写题目")
 
+    async def _dispatch(self, submission_id: int) -> None:
+        """按配置把加工投递到异步队列；队列不可用时安全回退到同步加工。"""
+        if get_settings().task_queue_enabled:
+            try:
+                await self._enqueue(submission_id)
+                return
+            except Exception as exc:  # noqa: BLE001 - 队列故障不应阻断投稿
+                logger.warning(
+                    "投稿 %s 入队失败，回退同步加工：%s", submission_id, exc, exc_info=True
+                )
+        await self.process(submission_id)
+
     async def _enqueue(self, submission_id: int) -> None:
         from arq import create_pool
         from arq.connections import RedisSettings
 
         pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-        await pool.enqueue_job("process_submission", submission_id)
+        try:
+            await pool.enqueue_job("process_submission", submission_id)
+        finally:
+            await pool.aclose()
 
-    async def _process(self, submission: Submission) -> None:
-        submission.processed_md = await self.llm.format_content(
-            submission.raw_content, submission.target_type
-        )
-        submission.status = "pending_review"
+    async def process(self, submission_id: int) -> Submission | None:
+        """对投稿做大模型加工（同步路径与 Worker 共用）。
+
+        - 仅处理 ``processing`` 态，天然幂等（重复投递不会二次加工）。
+        - 加工异常落 ``failed`` 态并记录原因，供用户/管理员重试。
+        """
+        submission = await self.repo.get(submission_id)
+        if submission is None or submission.status != "processing":
+            return submission
+        try:
+            submission.processed_md = await self.llm.format_content(
+                submission.raw_content, submission.target_type
+            )
+            submission.status = "pending_review"
+            submission.reject_reason = None
+        except Exception as exc:  # noqa: BLE001 - 记录失败原因，避免卡在 processing
+            logger.exception("投稿 %s 加工失败", submission_id)
+            submission.status = "failed"
+            submission.reject_reason = f"加工失败：{exc}"[:500]
         await self.db.commit()
         await self.db.refresh(submission)
+        return submission
+
+    async def retry(self, submission_id: int, user: User) -> Submission:
+        """重试加工失败的投稿（作者本人或管理员）。"""
+        submission = await self.repo.get(submission_id)
+        if submission is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投稿不存在")
+        if user.role != "admin" and submission.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作该投稿")
+        if submission.status != "failed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"当前状态为 {submission.status}，仅失败的投稿可重试",
+            )
+        submission.status = "processing"
+        submission.reject_reason = None
+        await self.db.commit()
+        await self._dispatch(submission_id)
+        await self.db.refresh(submission)
+        return submission
 
     async def approve(self, submission_id: int) -> Submission:
         submission = await self.repo.get(submission_id)

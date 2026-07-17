@@ -10,6 +10,7 @@ import {
   createSubmission,
   getAccessToken,
   getMySubmissions,
+  retrySubmission,
   type Submission,
   type SubmissionCreateInput,
   type TargetType,
@@ -28,6 +29,7 @@ const STATUS_BADGE: Record<string, string> = {
   pending_review: "bg-amber-100 text-amber-700",
   published: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
+  failed: "bg-red-100 text-red-700",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -36,6 +38,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending_review: "待审核",
   published: "已发布",
   rejected: "已驳回",
+  failed: "加工失败",
 };
 
 export default function SubmitPage() {
@@ -67,6 +70,8 @@ function SubmitInner() {
   const [error, setError] = useState<string | null>(null);
   const [mine, setMine] = useState<Submission[]>([]);
 
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+
   const loadMine = useCallback(() => {
     const token = getAccessToken();
     if (!token) return;
@@ -78,6 +83,27 @@ function SubmitInner() {
   useEffect(() => {
     loadMine();
   }, [loadMine]);
+
+  // 异步加工时投稿会停留在「加工中」，轮询刷新直到状态流转。
+  useEffect(() => {
+    if (!mine.some((s) => s.status === "processing")) return;
+    const timer = setInterval(loadMine, 3000);
+    return () => clearInterval(timer);
+  }, [mine, loadMine]);
+
+  async function handleRetry(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    setRetryingId(id);
+    try {
+      await retrySubmission(token, id);
+      loadMine();
+    } catch {
+      // 忽略：状态会在下次刷新体现
+    } finally {
+      setRetryingId(null);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -107,8 +133,12 @@ function SubmitInner() {
 
     setSubmitting(true);
     try {
-      await createSubmission(token, payload);
-      setMessage("投稿已提交，大模型加工完成后进入审核队列。");
+      const created = await createSubmission(token, payload);
+      setMessage(
+        created.status === "processing"
+          ? "投稿已提交，正在后台加工，稍后在下方「我的投稿」查看进度。"
+          : "投稿已提交，大模型加工完成后进入审核队列。",
+      );
       setTitle("");
       setRaw("");
       setPromptMd("");
@@ -263,7 +293,16 @@ function SubmitInner() {
         </button>
       </form>
 
-      <h2 className="mb-3 mt-8 text-lg font-semibold text-slate-900">我的投稿</h2>
+      <div className="mb-3 mt-8 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">我的投稿</h2>
+        <button
+          type="button"
+          onClick={loadMine}
+          className="text-xs text-brand-600 hover:underline"
+        >
+          刷新
+        </button>
+      </div>
       {mine.length === 0 ? (
         <p className="text-sm text-slate-400">还没有投稿。</p>
       ) : (
@@ -274,12 +313,27 @@ function SubmitInner() {
                 <span className="text-sm font-medium text-slate-900">
                   [{TYPE_LABELS[s.target_type as TargetType] ?? s.target_type}] {s.title}
                 </span>
-                <span className={`rounded px-2 py-0.5 text-xs ${STATUS_BADGE[s.status] ?? ""}`}>
-                  {STATUS_LABEL[s.status] ?? s.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  {s.status === "failed" && (
+                    <button
+                      type="button"
+                      disabled={retryingId === s.id}
+                      onClick={() => handleRetry(s.id)}
+                      className="rounded border border-brand-500 px-2 py-0.5 text-xs text-brand-600 hover:bg-brand-50 disabled:opacity-50"
+                    >
+                      {retryingId === s.id ? "重试中…" : "重试"}
+                    </button>
+                  )}
+                  <span className={`rounded px-2 py-0.5 text-xs ${STATUS_BADGE[s.status] ?? ""}`}>
+                    {STATUS_LABEL[s.status] ?? s.status}
+                  </span>
+                </div>
               </div>
-              {s.reject_reason && (
+              {s.status === "rejected" && s.reject_reason && (
                 <p className="mt-1 text-xs text-red-600">驳回原因：{s.reject_reason}</p>
+              )}
+              {s.status === "failed" && s.reject_reason && (
+                <p className="mt-1 text-xs text-red-600">{s.reject_reason}</p>
               )}
             </div>
           ))}

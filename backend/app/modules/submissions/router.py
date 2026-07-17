@@ -28,3 +28,13 @@ async def my_submissions(
 ) -> list[SubmissionOut]:
     items = await SubmissionRepository(db).list_by_user(current_user.id)
     return [SubmissionOut.model_validate(s) for s in items]
+
+
+@router.post("/{submission_id}/retry", response_model=SubmissionOut)
+async def retry_submission(
+    submission_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SubmissionOut:
+    submission = await SubmissionService(db).retry(submission_id, current_user)
+    return SubmissionOut.model_validate(submission)
