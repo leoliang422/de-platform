@@ -88,6 +88,22 @@
 > 本地联调：`export TASK_QUEUE_ENABLED=true REDIS_URL=redis://localhost:6379/0`，
 > 另开一终端在 `backend/` 跑 `arq app.workers.main.WorkerSettings`。不设时保持同步加工。
 
+## 文件存储（图片上传 · M6.2）
+
+> 现状：默认 `STORAGE_PROVIDER=local`，图片存后端本地磁盘并由 `/uploads` 提供访问，
+> **零外部依赖，本地/演示即可用**。抽象层已支持切换 S3 兼容对象存储，凭证未配齐时
+> 自动回退 local，不影响现有功能。
+
+⚠️ **Render 免费/Starter 的磁盘是临时的**，重启/重部署会丢失上传文件。**正式上线务必切对象存储**。
+
+切换到 S3 兼容对象存储（推荐 Cloudflare R2，有免费额度；也可火山 TOS / AWS S3 / MinIO）：
+
+1. 建 Bucket（设为可公开读，或挂 CDN 域名），拿到：`Endpoint`、`Region`、`Bucket`、
+   `Access Key ID`、`Secret Access Key`、以及**公开访问域名**（`S3_PUBLIC_BASE_URL`）。
+   - Cloudflare R2：控制台 → R2 → 建桶 → 「Manage R2 API Tokens」建密钥；开启「Public access」或绑自定义域。
+2. Render 后端 Environment 填 `STORAGE_PROVIDER=s3` + 上述 `S3_*` 变量。
+3. 代码里 `S3Storage.save()` 标了 `TODO(M6-real)`（用 boto3/aioboto3 `put_object`），补齐后即用。
+
 ## 支付接入（微信 / 支付宝）
 
 > M5 现状：代码已把**支付抽象层、异步下单、回调结算（webhook）**都搭好，微信/支付宝
