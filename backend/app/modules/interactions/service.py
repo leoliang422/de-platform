@@ -279,3 +279,61 @@ class InteractionService:
                 )
             )
         return items
+
+
+# 热度权重：浏览 1、点赞 3、收藏 5。
+HOTNESS_WEIGHTS = {"views": 1, "likes": 3, "favorites": 5}
+
+
+class ContentStats:
+    __slots__ = ("views", "likes", "favorites", "comments")
+
+    def __init__(self, views: int = 0, likes: int = 0, favorites: int = 0, comments: int = 0):
+        self.views = views
+        self.likes = likes
+        self.favorites = favorites
+        self.comments = comments
+
+    @property
+    def hotness(self) -> int:
+        return (
+            self.views * HOTNESS_WEIGHTS["views"]
+            + self.likes * HOTNESS_WEIGHTS["likes"]
+            + self.favorites * HOTNESS_WEIGHTS["favorites"]
+        )
+
+
+async def bulk_content_stats(db: AsyncSession, ct: str, ids: list[int]) -> dict[int, ContentStats]:
+    """批量取一组内容的浏览/点赞/收藏/评论数，用于列表热度排序。"""
+    result: dict[int, ContentStats] = {i: ContentStats() for i in ids}
+    if not ids:
+        return result
+
+    views = await db.execute(
+        select(ContentView.content_id, ContentView.count).where(
+            ContentView.content_type == ct, ContentView.content_id.in_(ids)
+        )
+    )
+    for cid, count in views.all():
+        result[cid].views = int(count or 0)
+
+    reactions = await db.execute(
+        select(Reaction.content_id, Reaction.kind, func.count())
+        .where(Reaction.content_type == ct, Reaction.content_id.in_(ids))
+        .group_by(Reaction.content_id, Reaction.kind)
+    )
+    for cid, kind, count in reactions.all():
+        if kind == "like":
+            result[cid].likes = int(count)
+        elif kind == "favorite":
+            result[cid].favorites = int(count)
+
+    comments = await db.execute(
+        select(Comment.content_id, func.count())
+        .where(Comment.content_type == ct, Comment.content_id.in_(ids))
+        .group_by(Comment.content_id)
+    )
+    for cid, count in comments.all():
+        result[cid].comments = int(count)
+
+    return result

@@ -41,7 +41,7 @@ async def test_admin_knowledge_crud_and_visibility(client: AsyncClient, db: Asyn
 
     # 已发布 → 公开列表可见
     resp = await client.get("/knowledge")
-    assert "Spark Shuffle 原理" in [i["title"] for i in resp.json()]
+    assert "Spark Shuffle 原理" in [i["title"] for i in resp.json()["items"]]
 
     # 下架（status=draft）→ 公开列表不可见，但管理员全状态列表仍可见
     resp = await client.patch(
@@ -51,7 +51,7 @@ async def test_admin_knowledge_crud_and_visibility(client: AsyncClient, db: Asyn
     )
     assert resp.status_code == 200
     resp = await client.get("/knowledge")
-    assert "Spark Shuffle 原理" not in [i["title"] for i in resp.json()]
+    assert "Spark Shuffle 原理" not in [i["title"] for i in resp.json()["items"]]
     resp = await client.get("/admin/content/knowledge", headers=_auth(admin_token))
     assert any(i["id"] == item_id and i["status"] == "draft" for i in resp.json())
 
