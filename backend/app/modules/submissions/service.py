@@ -35,13 +35,7 @@ def _extra_from(data: SubmissionCreate) -> dict[str, Any]:
         "difficulty": data.difficulty,
         "tags": data.tags,
         "company_name": data.company_name,
-        "position": data.position,
-        "position_level": data.position_level,
-        "interview_date": data.interview_date,
-        "interview_rounds": data.interview_rounds,
-        "interview_result": data.interview_result,
-        "interview_city": data.interview_city,
-        "interview_channel": data.interview_channel,
+        "interview_type": data.interview_type,
         "qa_items": [q.model_dump() for q in data.qa_items] if data.qa_items else None,
         "level": data.level,
         "access_type": data.access_type,
@@ -81,9 +75,9 @@ class SubmissionService:
     def _validate(self, data: SubmissionCreate) -> None:
         if data.target_type == "interview":
             _require(bool(data.company_name), "面经投稿需填写企业名称")
-            _require(bool(data.position), "面经投稿需填写岗位")
+            _require(bool(data.interview_type), "面经投稿需选择类型")
             has_qa = any((q.question.strip() or q.answer.strip()) for q in (data.qa_items or []))
-            _require(has_qa, "面经投稿需至少填写一条问答（技术面或 HR 面）")
+            _require(has_qa, "面经投稿需至少填写一条问答")
         if data.target_type == "sql":
             _require(bool(data.prompt_md), "SQL 投稿需填写题目")
 
@@ -241,15 +235,10 @@ class SubmissionService:
             post = await interview_service.create_published(
                 self.db,
                 company_name=extra.get("company_name") or "未知企业",
-                position=extra.get("position") or "",
+                title=submission.title,
                 content_md=body,
+                interview_type=extra.get("interview_type"),
                 qa_items=extra.get("qa_items"),
-                position_level=extra.get("position_level"),
-                interview_date=extra.get("interview_date"),
-                rounds=extra.get("interview_rounds"),
-                result=extra.get("interview_result"),
-                city=extra.get("interview_city"),
-                channel=extra.get("interview_channel"),
                 author_id=author_id,
             )
             return post.id

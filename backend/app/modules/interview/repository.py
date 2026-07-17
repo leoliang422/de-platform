@@ -24,10 +24,9 @@ class InterviewRepository:
                 InterviewPost.company_id == company_id,
                 InterviewPost.status == "published",
             )
-            .order_by(InterviewPost.position, InterviewPost.id.desc())
+            .order_by(InterviewPost.id.desc())
         )
         return list(result.scalars().all())
 
     async def get_post(self, post_id: int) -> InterviewPost | None:
-        # qa 通过 relationship(lazy="selectin") 自动加载
         return await self.db.get(InterviewPost, post_id)

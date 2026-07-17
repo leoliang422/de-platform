@@ -168,7 +168,10 @@ async def list_interview(db: AsyncSession = Depends(get_db)) -> list[ContentSumm
     companies = {c.id: c.name for c in await InterviewRepository(db).list_companies()}
     return [
         ContentSummary(
-            id=p.id, title=p.position, subtitle=companies.get(p.company_id), status=p.status
+            id=p.id,
+            title=p.title or "(无标题)",
+            subtitle=companies.get(p.company_id),
+            status=p.status,
         )
         for p in posts
     ]
@@ -181,14 +184,9 @@ async def get_interview_detail(post_id: int, db: AsyncSession = Depends(get_db))
     return {
         "id": post.id,
         "company_name": company.name if company else "",
-        "position": post.position,
+        "title": post.title,
+        "interview_type": post.interview_type,
         "content_md": post.content_md,
-        "position_level": post.position_level,
-        "interview_date": post.interview_date,
-        "rounds": post.rounds,
-        "result": post.result,
-        "city": post.city,
-        "channel": post.channel,
         "status": post.status,
         "qa_items": [
             {
@@ -208,22 +206,17 @@ async def create_interview(
     post = await interview_service.create_published(
         db,
         company_name=data.company_name,
-        position=data.position,
+        title=data.title,
         content_md=data.content_md,
+        interview_type=data.interview_type,
         qa_items=[q.model_dump() for q in data.qa_items],
-        position_level=data.position_level,
-        interview_date=data.interview_date,
-        rounds=data.rounds,
-        result=data.result,
-        city=data.city,
-        channel=data.channel,
         author_id=None,
         status_value=data.status,
     )
     await db.commit()
     await db.refresh(post)
     return ContentSummary(
-        id=post.id, title=post.position, subtitle=data.company_name, status=post.status
+        id=post.id, title=post.title, subtitle=data.company_name, status=post.status
     )
 
 
@@ -238,7 +231,7 @@ async def update_interview(
     post = await interview_service.update(db, post_id, fields)
     companies = {c.id: c.name for c in await InterviewRepository(db).list_companies()}
     return ContentSummary(
-        id=post.id, title=post.position, subtitle=companies.get(post.company_id), status=post.status
+        id=post.id, title=post.title, subtitle=companies.get(post.company_id), status=post.status
     )
 
 
