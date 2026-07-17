@@ -30,8 +30,16 @@ services:
       # 首次部署灌种子（含管理员 admin@example.com / admin12345），之后可改为 0
       - key: SEED_ON_START
         value: "1"
+      # 大模型：智谱 GLM（OpenAI 兼容）。抽取/补全用 glm-4-flash（免费、快）。
+      # API Key 为敏感项，不入仓库：部署后在控制台 Environment 里填 LLM_API_KEY。
       - key: LLM_PROVIDER
-        value: mock
+        value: zhipu
+      - key: LLM_BASE_URL
+        value: https://open.bigmodel.cn/api/paas/v4
+      - key: LLM_MODEL
+        value: glm-4-flash
+      - key: LLM_API_KEY
+        sync: false
       - key: PAYMENT_PROVIDER
         value: mock
       # 投稿加工队列：默认关闭（同步加工，无需 Redis）。
