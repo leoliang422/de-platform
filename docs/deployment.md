@@ -92,7 +92,9 @@ LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 LLM_MODEL=glm-4-flash
 ```
 
-**线上（Render）**：后端服务 → Environment → 加上面 4 个变量 → Save（会自动重部署）。
+**线上（Render）**：`LLM_PROVIDER` / `LLM_BASE_URL` / `LLM_MODEL` 已写进 `render.yaml`
+（`Blueprint → Sync` 即可下发）；**仅 `LLM_API_KEY` 为敏感项**，需在后端服务 → Environment
+里手动填写 → Save（会自动重部署）。
 
 改完即生效：此后「投稿」会调用智谱把原始内容整理成规范 Markdown；调用失败时投稿落 `failed`
 态可在「我的投稿」重试，不影响其它功能。
