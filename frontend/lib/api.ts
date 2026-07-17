@@ -361,6 +361,96 @@ export function getKnowledgeDetail(id: number, token?: string | null): Promise<K
   return request<KnowledgeDetail>(`/knowledge/${id}`, maybeAuth(token));
 }
 
+// ---- Knowledge Tree（知识树） ----
+export interface TreeNode {
+  id: number;
+  title: string;
+  knowledge_item_id: number | null;
+  status: string;
+  proposer_id: number | null;
+  order_index: number;
+  children: TreeNode[];
+}
+
+export interface PendingNode {
+  id: number;
+  category_id: number;
+  parent_id: number | null;
+  parent_title: string | null;
+  title: string;
+  knowledge_item_id: number | null;
+  proposer_id: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+export function getKnowledgeTree(categoryId: number): Promise<TreeNode[]> {
+  return request<TreeNode[]>(`/knowledge-tree?category_id=${categoryId}`);
+}
+
+export function proposeTreeNode(
+  token: string,
+  input: { category_id: number; parent_id?: number | null; title: string; note?: string | null },
+): Promise<{ id: number; status: string }> {
+  return authRequest(`/knowledge-tree/nodes`, token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminGetKnowledgeTree(token: string, categoryId: number): Promise<TreeNode[]> {
+  return authRequest<TreeNode[]>(`/admin/knowledge-tree?category_id=${categoryId}`, token);
+}
+
+export function adminListPendingNodes(token: string): Promise<PendingNode[]> {
+  return authRequest<PendingNode[]>(`/admin/knowledge-tree/pending`, token);
+}
+
+export function adminApproveNode(token: string, id: number): Promise<{ status: string }> {
+  return authRequest(`/admin/knowledge-tree/${id}/approve`, token, { method: "POST" });
+}
+
+export function adminRejectNode(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/admin/knowledge-tree/${id}/reject`, token, { method: "POST" });
+}
+
+export function adminCreateTreeNode(
+  token: string,
+  input: {
+    category_id: number;
+    parent_id?: number | null;
+    title: string;
+    knowledge_item_id?: number | null;
+    order_index?: number;
+  },
+): Promise<{ id: number; status: string }> {
+  return authRequest(`/admin/knowledge-tree/nodes`, token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminUpdateTreeNode(
+  token: string,
+  id: number,
+  input: {
+    title?: string;
+    parent_id?: number | null;
+    knowledge_item_id?: number | null;
+    order_index?: number;
+    status?: string;
+  },
+): Promise<{ id: number; status: string }> {
+  return authRequest(`/admin/knowledge-tree/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminDeleteTreeNode(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/admin/knowledge-tree/${id}`, token, { method: "DELETE" });
+}
+
 // ---- SQL ----
 export interface SqlListItem {
   id: number;

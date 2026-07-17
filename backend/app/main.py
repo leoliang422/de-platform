@@ -13,6 +13,8 @@ from app.modules.files.router import router as files_router
 from app.modules.interactions.router import router as interactions_router
 from app.modules.interview.router import router as interview_router
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.knowledge_tree.router import admin_router as knowledge_tree_admin_router
+from app.modules.knowledge_tree.router import router as knowledge_tree_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.payment.router import router as payment_router
 from app.modules.points.router import router as points_router
@@ -50,6 +52,8 @@ app.include_router(users_router)
 app.include_router(files_router)
 app.include_router(catalog_router)
 app.include_router(knowledge_router)
+app.include_router(knowledge_tree_router)
+app.include_router(knowledge_tree_admin_router)
 app.include_router(sql_router)
 app.include_router(interview_router)
 app.include_router(projects_router)
