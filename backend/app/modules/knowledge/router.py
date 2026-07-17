@@ -21,13 +21,14 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 @router.get("", response_model=KnowledgeListPage)
 async def list_knowledge(
     category_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, description="关键词搜索（标题/正文）"),
     sort: Literal["hot", "new"] = Query(default="hot"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> KnowledgeListPage:
-    """八股列表：按热度（浏览+点赞+收藏加权）或最新排序，分页返回并附带互动角标。"""
-    items = await KnowledgeRepository(db).list_published(category_id)
+    """八股列表：可按关键词搜索；按热度（浏览+点赞+收藏加权）或最新排序，分页返回并附带互动角标。"""
+    items = await KnowledgeRepository(db).list_published(category_id, q)
     stats = await bulk_content_stats(db, "knowledge", [i.id for i in items])
 
     rows: list[KnowledgeListItem] = []

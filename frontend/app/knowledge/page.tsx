@@ -20,6 +20,8 @@ export default function KnowledgePage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [sort, setSort] = useState<"hot" | "new">("hot");
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,20 +31,26 @@ export default function KnowledgePage() {
       .catch(() => setCategories([]));
   }, []);
 
+  // 输入防抖：停止输入 300ms 后再触发搜索
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
   useEffect(() => {
     setPage(1);
-  }, [selected, sort]);
+  }, [selected, sort, debouncedQuery]);
 
   useEffect(() => {
     setLoading(true);
-    getKnowledgeList({ categoryId: selected, sort, page, pageSize: PAGE_SIZE })
+    getKnowledgeList({ categoryId: selected, q: debouncedQuery, sort, page, pageSize: PAGE_SIZE })
       .then((res) => {
         setItems(res.items);
         setTotal(res.total);
       })
       .catch(() => setError("无法加载内容，请确认后端已启动"))
       .finally(() => setLoading(false));
-  }, [selected, sort, page]);
+  }, [selected, sort, page, debouncedQuery]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -70,6 +78,28 @@ export default function KnowledgePage() {
         </aside>
 
         <section>
+          <div className="mb-4">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                🔍
+              </span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索关键词（标题 / 正文）…"
+                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-9 text-sm focus:border-brand-500 focus:outline-none"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  aria-label="清空搜索"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
           <div className="mb-4 flex items-center justify-between">
             <div className="flex gap-2">
               {(["hot", "new"] as const).map((s) => (
@@ -86,7 +116,11 @@ export default function KnowledgePage() {
                 </button>
               ))}
             </div>
-            {total > 0 && <span className="text-xs text-slate-400">共 {total} 条</span>}
+            {total > 0 && (
+              <span className="text-xs text-slate-400">
+                {debouncedQuery ? `搜索到 ${total} 条` : `共 ${total} 条`}
+              </span>
+            )}
           </div>
 
           {loading ? (
@@ -94,7 +128,7 @@ export default function KnowledgePage() {
           ) : error ? (
             <ErrorText message={error} />
           ) : items.length === 0 ? (
-            <Empty message="暂无内容" />
+            <Empty message={debouncedQuery ? `未找到与「${debouncedQuery}」相关的内容` : "暂无内容"} />
           ) : (
             <>
               <ol className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">

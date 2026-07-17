@@ -10,10 +10,17 @@ class KnowledgeRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def list_published(self, category_id: int | None = None) -> list[KnowledgeItem]:
+    async def list_published(
+        self, category_id: int | None = None, q: str | None = None
+    ) -> list[KnowledgeItem]:
         stmt = select(KnowledgeItem).where(KnowledgeItem.status == "published")
         if category_id is not None:
             stmt = stmt.where(KnowledgeItem.category_id == category_id)
+        if q:
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(
+                KnowledgeItem.title.ilike(like) | KnowledgeItem.content_md.ilike(like)
+            )
         stmt = stmt.order_by(KnowledgeItem.id.desc())
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

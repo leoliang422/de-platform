@@ -176,19 +176,9 @@ function InterviewCardView({ post }: { post: InterviewCard }) {
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* 卡片头部：上传者信息 */}
+      {/* 卡片头部：上传者信息（轮次不在此重复展示，改由下方每轮小标题标识） */}
       <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
         <AuthorLink post={post} />
-        <div className="ml-auto flex flex-wrap gap-1">
-          {post.rounds_covered.map((r) => (
-            <span
-              key={r}
-              className="rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
-            >
-              {INTERVIEW_ROUND_LABEL[r] ?? r}
-            </span>
-          ))}
-        </div>
       </div>
 
       <div className="mt-3 space-y-4">
