@@ -191,15 +191,6 @@ function InterviewCardView({ post }: { post: InterviewCard }) {
         </div>
       </div>
 
-      <h3 className="mt-3 text-base font-semibold text-slate-900">{post.title}</h3>
-
-      {post.content_md && (
-        <div className="mt-2">
-          <p className="mb-1 text-xs font-semibold text-slate-500">整体感受</p>
-          <Prose>{post.content_md}</Prose>
-        </div>
-      )}
-
       <div className="mt-3 space-y-4">
         {byRound.map(({ round, items }) => (
           <div key={round}>

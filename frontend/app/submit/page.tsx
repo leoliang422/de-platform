@@ -133,8 +133,9 @@ function SubmitInner() {
     const paid = accessType === "paid";
     const payload: SubmissionCreateInput = {
       target_type: targetType,
-      title,
-      raw_content: raw,
+      // 面经无标题/无整体感受：标题回落为企业名，正文置空
+      title: targetType === "interview" ? companyName : title,
+      raw_content: targetType === "interview" ? "" : raw,
       prompt_md: targetType === "sql" ? promptMd : undefined,
       difficulty: targetType === "sql" ? difficulty : undefined,
       tags: targetType === "sql" ? tags : undefined,
@@ -198,10 +199,12 @@ function SubmitInner() {
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">标题</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required className={inputCls} />
-        </div>
+        {targetType !== "interview" && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">标题</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} required className={inputCls} />
+          </div>
+        )}
 
         {targetType === "sql" && (
           <>
@@ -366,16 +369,14 @@ function SubmitInner() {
           </>
         )}
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            {targetType === "sql"
-              ? "解答 / 思路（原始内容）"
-              : targetType === "interview"
-                ? "整体感受 / 概述（原始内容）"
-                : "正文（原始内容）"}
-          </label>
-          <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} required className={inputCls} />
-        </div>
+        {targetType !== "interview" && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              {targetType === "sql" ? "解答 / 思路（原始内容）" : "正文（原始内容）"}
+            </label>
+            <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} required className={inputCls} />
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         {message && <p className="text-sm text-green-600">{message}</p>}

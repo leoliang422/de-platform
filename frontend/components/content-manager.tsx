@@ -7,13 +7,15 @@ import {
   adminDeleteContent,
   adminGetContentDetail,
   adminListContent,
+  adminListCategories,
   adminUpdateContent,
   getAccessToken,
+  type CategoryFlat,
   type ContentSummary,
   type ContentType,
 } from "@/lib/api";
 
-type FieldType = "text" | "textarea" | "number" | "checkbox" | "select";
+type FieldType = "text" | "textarea" | "number" | "checkbox" | "select" | "category";
 
 interface FieldDef {
   name: string;
@@ -36,7 +38,7 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
   knowledge: [
     { name: "title", label: "标题", type: "text", required: true },
     { name: "content_md", label: "正文（直接粘贴 Markdown）", type: "textarea", required: true },
-    { name: "category_id", label: "分类 ID（可选）", type: "number" },
+    { name: "category_id", label: "分类（可选）", type: "category" },
     { name: "is_paid", label: "付费内容", type: "checkbox" },
     { name: "price_cash", label: "现金价（元，可选）", type: "text", nullable: true },
     { name: "price_points", label: "积分价（可选）", type: "number" },
@@ -56,11 +58,10 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
       ],
     },
     { name: "tags", label: "标签（逗号分隔）", type: "text" },
-    { name: "category_id", label: "分类 ID（可选）", type: "number" },
+    { name: "category_id", label: "分类（可选）", type: "category" },
   ],
   interview: [
     { name: "company_name", label: "企业名称", type: "text", required: true },
-    { name: "title", label: "标题", type: "text", required: true },
     {
       name: "interview_type",
       label: "类型",
@@ -71,11 +72,6 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
         { value: "daily", label: "日常实习" },
         { value: "summer", label: "暑期实习" },
       ],
-    },
-    {
-      name: "content_md",
-      label: "整体感受 / 概述（Markdown，可选；结构化问答请用投稿入口）",
-      type: "textarea",
     },
   ],
   project: [
@@ -126,6 +122,7 @@ export function ContentManager() {
   const [status, setStatus] = useState("published");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cats, setCats] = useState<CategoryFlat[]>([]);
 
   const load = useCallback((t: ContentType) => {
     const token = getAccessToken();
@@ -137,6 +134,12 @@ export function ContentManager() {
 
   useEffect(() => {
     load(type);
+    const token = getAccessToken();
+    if (token) {
+      adminListCategories(token, type)
+        .then(setCats)
+        .catch(() => setCats([]));
+    }
   }, [type, load]);
 
   function switchType(t: ContentType) {
@@ -178,7 +181,7 @@ export function ContentManager() {
       const val = values[f.name];
       if (f.type === "checkbox") {
         body[f.name] = Boolean(val);
-      } else if (f.type === "number") {
+      } else if (f.type === "number" || f.type === "category") {
         body[f.name] = val === "" ? null : Number(val);
       } else if (f.nullable) {
         body[f.name] = val === "" ? null : val;
@@ -287,6 +290,20 @@ export function ContentManager() {
                   {f.options!.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : f.type === "category" ? (
+                <select
+                  value={values[f.name] as string}
+                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="">（不分类）</option>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.parent_id ? "　└ " : ""}
+                      {c.name}
                     </option>
                   ))}
                 </select>
