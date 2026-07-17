@@ -14,6 +14,20 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://de:de@localhost:5432/de_platform"
     redis_url: str = "redis://localhost:6379/0"
 
+    # 前端站点根地址，用于拼接邮件里的重置/验证链接。
+    frontend_base_url: str = "http://localhost:3000"
+
+    # ---- 邮件发送 ----
+    # mock：不真正发信，仅记录日志（本地/演示默认，找回密码返回 dev token 便于自测）。
+    # smtp：真实 SMTP；凭证未配齐时自动回退 mock。获取方式见 docs/deployment.md「邮件发送」。
+    email_provider: str = "mock"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
     llm_provider: str = "mock"
     # 支付通道：mock（默认，同步结算）| wechat | alipay。
     # 选 wechat/alipay 但凭证未配齐时，工厂会自动回退到 mock（见 payment/provider.py）。
