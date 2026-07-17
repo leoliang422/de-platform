@@ -119,22 +119,21 @@
 2. Render 后端 Environment 填 `STORAGE_PROVIDER=s3` + 上述 `S3_*` 变量。
 3. 代码里 `S3Storage.save()` 标了 `TODO(M6-real)`（用 boto3/aioboto3 `put_object`），补齐后即用。
 
-## 投稿文件解析（Word / PDF / 图片 → 大模型）
+## 投稿文件解析（Word / PDF / 图片）
 
-> 现状：默认 `FILE_EXTRACT_PROVIDER=mock`。投稿页「从文件导入」接口 `POST /files/extract`：
+> 现状：默认 `FILE_EXTRACT_PROVIDER=local`，**不依赖大模型即可用**。
+> 投稿页「从文件导入」接口 `POST /files/extract`：
 > - **文本 / Markdown / CSV / JSON**：直接解码为正文（真实可用）。
 > - **图片**：落盘后返回 `![](url)` Markdown，前端可直接展示（真实可用）。
-> - **Word / PDF**：落盘留存下载链接，正文插入**占位提示**（解析/大模型识别尚未接入），
->   不影响其它功能。
+> - **Word(.docx) / PDF**：用 `python-docx` / `pdfplumber` 本地抽取文字（真实可用）；
+>   抽不出时（旧版 `.doc`、扫描件/纯图片 PDF、解析失败）落盘留下载链接 + 占位提示。
 
-切换到真实解析（`FILE_EXTRACT_PROVIDER=llm`）：
+可选：接入大模型做「归一 / OCR」增强（`FILE_EXTRACT_PROVIDER=llm`）：
 
-1. 在 `backend/app/modules/files/extract.py` 的 `LLMExtractor` 里补齐：
-   - Word/PDF：用 `python-docx` / `pdfplumber` 等解析库或云文档服务转纯文本；
-   - 图片：走多模态 OCR（如豆包 vision）；
-   - 统一再交 LLM 归一为 Markdown。
-2. 把 `LLMExtractor.is_configured()` 改为真实判断（凭证/服务就绪时返回 `True`）。
-3. 未接入时工厂自动回退 `MockExtractor`（占位），因此可安全先上线。
+1. 在 `backend/app/modules/files/extract.py` 的 `LLMExtractor.extract()` 里，把本地抽取的
+   `local.text` 送 LLM 归一为规范 Markdown；扫描件/图片可走多模态 OCR（如豆包 vision）。
+2. 把 `LLMExtractor.is_configured()` 改为真实判断（凭证就绪时返回 `True`）。
+3. 未接入时工厂自动回退本地解析（`LocalDocExtractor`），可安全先上线。
 
 ## 支付接入（微信 / 支付宝）
 

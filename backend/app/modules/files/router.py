@@ -6,8 +6,6 @@ from app.modules.files.extract import (
     DOCUMENT_TYPES,
     IMAGE_TYPES,
     TEXT_TYPES,
-    ExtractorNotConfigured,
-    MockExtractor,
     get_extractor,
 )
 from app.modules.files.storage import StorageNotConfigured, get_storage
@@ -109,23 +107,15 @@ async def extract_file(
             "url": url,
         }
 
-    # 文档（Word/PDF）：交给解析器（默认占位，链接到大模型的真实实现待接入）
+    # 文档（Word/PDF）：本地库抽取文字（不依赖大模型）；抽不出时返回占位提示
     assert content_type in DOCUMENT_TYPES
-    extractor = get_extractor()
-    try:
-        text = await extractor.extract(
-            data=data, filename=filename, content_type=content_type, url=url
-        )
-        placeholder = extractor.name == "mock"
-    except ExtractorNotConfigured:
-        text = await MockExtractor().extract(
-            data=data, filename=filename, content_type=content_type, url=url
-        )
-        placeholder = True
+    result = await get_extractor().extract(
+        data=data, filename=filename, content_type=content_type, url=url
+    )
     return {
         "filename": filename,
         "kind": "document",
-        "placeholder": placeholder,
-        "text": text,
+        "placeholder": result.placeholder,
+        "text": result.text,
         "url": url,
     }

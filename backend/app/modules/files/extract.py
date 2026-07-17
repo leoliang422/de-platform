@@ -3,17 +3,23 @@
 分层：
 - 文本类（txt/md/csv/json）直接解码，无需外部依赖（真实可用）。
 - 图片直接以 Markdown 图片语法内联，前端即可展示（真实可用）。
-- Word / PDF 等文档需要解析，交给「解析器」抽象：
-    - ``MockExtractor``（默认）：仅返回占位说明 + 文件下载链接，不做真正解析。
-    - ``LLMExtractor``：接入大模型 / 文档解析服务的骨架（占位）；未接入时工厂回退 mock，
-      因此不影响现有功能。真实实现见方法内 TODO。
+- Word(.docx) / PDF 用本地解析库（python-docx / pdfplumber）抽取纯文本，**不依赖大模型**：
+    - ``LocalDocExtractor``（默认）：真实抽取文字；抽不出（旧版 .doc、扫描件、解析失败）时
+      回退占位提示 + 下载链接。
+    - ``LLMExtractor``：在本地抽取基础上再交大模型归一为规范 Markdown 的骨架（占位）；
+      未接入时工厂回退本地解析，因此不影响现有功能。
 """
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from io import BytesIO
 from typing import Protocol, runtime_checkable
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # content_type -> 扩展名。分三类，决定不同的处理路径。
 TEXT_TYPES: dict[str, str] = {
@@ -29,16 +35,62 @@ IMAGE_TYPES: dict[str, str] = {
     "image/gif": ".gif",
     "image/webp": ".webp",
 }
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+PDF_TYPE = "application/pdf"
 DOCUMENT_TYPES: dict[str, str] = {
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/msword": ".doc",
-    "application/pdf": ".pdf",
+    DOCX_TYPE: ".docx",
+    "application/msword": ".doc",  # 旧版二进制 Word，本地库无法解析 → 占位
+    PDF_TYPE: ".pdf",
 }
 ALLOWED_TYPES: dict[str, str] = {**TEXT_TYPES, **IMAGE_TYPES, **DOCUMENT_TYPES}
 
 
-class ExtractorNotConfigured(RuntimeError):
-    """真实解析服务未接入时抛出，工厂据此回退 mock。"""
+@dataclass
+class ExtractOutput:
+    text: str  # 可直接插入投稿正文的 Markdown
+    placeholder: bool  # True 表示未真正解析出内容（仅占位提示）
+
+
+def _placeholder(filename: str, url: str | None, note: str) -> ExtractOutput:
+    link = f"[{filename}]({url})" if url else filename
+    return ExtractOutput(text=f"> 已上传文件：{link}\n>\n> {note}\n", placeholder=True)
+
+
+def _parse_docx(data: bytes) -> str:
+    from docx import Document  # 延迟导入，避免无谓加载
+
+    doc = Document(BytesIO(data))
+    lines: list[str] = []
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+        # Word 标题样式 → Markdown 标题，尽量保留层级
+        style = (para.style.name or "").lower() if para.style else ""
+        if style.startswith("heading"):
+            level = "".join(ch for ch in style if ch.isdigit()) or "2"
+            lines.append(f"{'#' * min(int(level), 6)} {text}")
+        else:
+            lines.append(text)
+    # 表格按管道表拼接
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+            if any(cells):
+                lines.append("| " + " | ".join(cells) + " |")
+    return "\n\n".join(lines).strip()
+
+
+def _parse_pdf(data: bytes) -> str:
+    import pdfplumber
+
+    parts: list[str] = []
+    with pdfplumber.open(BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            text = (page.extract_text() or "").strip()
+            if text:
+                parts.append(text)
+    return "\n\n".join(parts).strip()
 
 
 @runtime_checkable
@@ -47,51 +99,65 @@ class DocumentExtractor(Protocol):
 
     async def extract(
         self, *, data: bytes, filename: str, content_type: str, url: str | None
-    ) -> str:
-        """把文档二进制解析为 Markdown 文本。"""
-        ...
+    ) -> ExtractOutput: ...
 
 
-class MockExtractor:
-    """占位解析器：不解析文档内容，仅返回提示 + 下载链接，引导用户手动补充。"""
+class LocalDocExtractor:
+    """用本地解析库抽取 Word/PDF 文字，不依赖大模型。"""
 
-    name = "mock"
+    name = "local"
 
     async def extract(
         self, *, data: bytes, filename: str, content_type: str, url: str | None
-    ) -> str:
-        link = f"[{filename}]({url})" if url else filename
-        return (
-            f"> 已上传文件：{link}\n>\n"
-            "> 文档解析 / 大模型识别尚未接入（占位）。请在下方手动补充或粘贴正文。\n"
-        )
+    ) -> ExtractOutput:
+        try:
+            if content_type == DOCX_TYPE:
+                text = _parse_docx(data)
+            elif content_type == PDF_TYPE:
+                text = _parse_pdf(data)
+            else:
+                # 旧版 .doc 等本地库不支持
+                return _placeholder(
+                    filename, url, "暂不支持旧版 .doc 解析，请另存为 .docx 或手动粘贴正文。"
+                )
+        except Exception as exc:  # noqa: BLE001 - 解析失败不应阻断投稿
+            logger.warning("文件 %s 解析失败：%s", filename, exc, exc_info=True)
+            return _placeholder(filename, url, "文件解析失败，请检查文件或手动粘贴正文。")
+
+        if not text:
+            return _placeholder(
+                filename,
+                url,
+                "未从文件中提取到文字（可能是扫描件/纯图片 PDF），请手动补充或改用图片上传。",
+            )
+        return ExtractOutput(text=text, placeholder=False)
 
 
 class LLMExtractor:
-    """接入大模型 / 文档解析服务的骨架（占位）。
+    """本地抽取 + 大模型归一为规范 Markdown 的骨架（占位）。
 
-    真实实现思路：
-    - Word/PDF：用解析库（python-docx / pdfplumber）或云文档服务转纯文本；
-    - 图片：走多模态 OCR（如豆包 vision）识别文字；
-    - 统一再交给 LLM 归一为规范 Markdown。
-    凭证 / 服务未接入时 ``is_configured`` 返回 False，工厂不会选中它（回退 mock）。
+    真实实现：先用 ``LocalDocExtractor`` 抽文字，再送 LLM 归一；图片可走多模态 OCR。
+    未接入（``is_configured`` 为 False）时工厂回退本地解析，不影响现有功能。
     """
 
     name = "llm"
 
     @staticmethod
     def is_configured() -> bool:
-        # TODO(M-real): 接入文档解析 / 多模态服务后返回真实判断。
+        # TODO(M-real): 接入 LLM 归一/多模态 OCR 后返回真实判断。
         return False
 
     async def extract(
         self, *, data: bytes, filename: str, content_type: str, url: str | None
-    ) -> str:
-        # TODO(M-real): 解析文档 → 文本 → LLM 归一为 Markdown。
-        raise ExtractorNotConfigured("文档 / 大模型解析尚未接入（占位）。")
+    ) -> ExtractOutput:
+        local = await LocalDocExtractor().extract(
+            data=data, filename=filename, content_type=content_type, url=url
+        )
+        # TODO(M-real): local.text 送 LLM 归一为规范 Markdown 后返回。
+        return local
 
 
 def get_extractor() -> DocumentExtractor:
     if get_settings().file_extract_provider == "llm" and LLMExtractor.is_configured():
         return LLMExtractor()
-    return MockExtractor()
+    return LocalDocExtractor()

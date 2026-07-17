@@ -113,23 +113,56 @@ async def test_extract_image_returns_markdown(
         get_settings.cache_clear()
 
 
-async def test_extract_document_is_placeholder(
+async def test_extract_docx_real_text(
     client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STORAGE_LOCAL_DIR", str(tmp_path))
     get_settings.cache_clear()
     try:
+        # 用 python-docx 生成一个真实 .docx
+        from io import BytesIO
+
+        from docx import Document
+
+        doc = Document()
+        doc.add_heading("数据倾斜", level=2)
+        doc.add_paragraph("倾斜的本质是分区数据分布不均。")
+        buf = BytesIO()
+        doc.save(buf)
+
         token = await _token(client, "ex3@test.io")
-        docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        docx_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         resp = await client.post(
             "/files/extract",
             headers=_auth(token),
-            files={"file": ("r.docx", b"PK\x03\x04fake", docx)},
+            files={"file": ("r.docx", buf.getvalue(), docx_type)},
         )
         assert resp.status_code == 201, resp.text
         body = resp.json()
         assert body["kind"] == "document"
-        assert body["placeholder"] is True  # 占位：解析未接入
+        assert body["placeholder"] is False  # 真实抽取到文字
+        assert "数据倾斜" in body["text"]
+        assert "分区数据分布不均" in body["text"]
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_extract_invalid_docx_falls_back_to_placeholder(
+    client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STORAGE_LOCAL_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        token = await _token(client, "ex3b@test.io")
+        docx_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        resp = await client.post(
+            "/files/extract",
+            headers=_auth(token),
+            files={"file": ("bad.docx", b"not a real docx", docx_type)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["placeholder"] is True  # 解析失败 → 占位 + 下载链接
         assert body["url"] and "/uploads/" in body["url"]
     finally:
         get_settings.cache_clear()
