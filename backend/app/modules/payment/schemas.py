@@ -24,6 +24,12 @@ class EntitlementOut(BaseModel):
 
 
 class UnlockResult(BaseModel):
-    entitlement: EntitlementOut
+    # 同步结算（积分 / mock 现金）返回 entitlement；异步支付（微信/支付宝）返回
+    # status="pending" + pay_url/qr_code，entitlement 留空，待回调后再解锁。
+    status: str = "paid"
+    entitlement: EntitlementOut | None = None
     balance: int
     already_unlocked: bool = False
+    order_id: int | None = None
+    pay_url: str | None = None
+    qr_code: str | None = None

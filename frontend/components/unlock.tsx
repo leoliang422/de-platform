@@ -28,14 +28,25 @@ export function UnlockPanel({
   const { user, refreshUser } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [payUrl, setPayUrl] = useState<string | null>(null);
 
   async function unlock(method: UnlockMethod) {
     const token = getAccessToken();
     if (!token) return;
     setBusy(true);
     setError(null);
+    setPayUrl(null);
     try {
-      await unlockContent(token, { content_type: contentType, content_id: contentId, method });
+      const res = await unlockContent(token, {
+        content_type: contentType,
+        content_id: contentId,
+        method,
+      });
+      if (res.status === "pending") {
+        // 异步支付（微信/支付宝）：引导用户去付款，回调结算后再刷新解锁态。
+        setPayUrl(res.pay_url ?? null);
+        return;
+      }
       await refreshUser();
       onUnlocked();
     } catch (err) {
@@ -84,6 +95,20 @@ export function UnlockPanel({
             </button>
           )}
         </div>
+      )}
+      {payUrl && (
+        <p className="mt-3 text-sm text-amber-800">
+          请前往
+          <a
+            href={payUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mx-1 font-medium text-brand-600 hover:underline"
+          >
+            支付页面
+          </a>
+          完成付款，支付成功后刷新本页即可查看。
+        </p>
       )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </div>

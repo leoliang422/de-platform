@@ -15,7 +15,24 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     llm_provider: str = "mock"
+    # 支付通道：mock（默认，同步结算）| wechat | alipay。
+    # 选 wechat/alipay 但凭证未配齐时，工厂会自动回退到 mock（见 payment/provider.py）。
     payment_provider: str = "mock"
+
+    # ---- 微信支付（v3 Native）占位配置；获取方式见 docs/deployment.md ----
+    wechat_app_id: str = ""
+    wechat_mch_id: str = ""
+    wechat_api_v3_key: str = ""
+    wechat_cert_serial: str = ""
+    wechat_private_key_path: str = ""
+    wechat_notify_url: str = ""
+
+    # ---- 支付宝（电脑/手机网站支付）占位配置；获取方式见 docs/deployment.md ----
+    alipay_app_id: str = ""
+    alipay_private_key: str = ""
+    alipay_public_key: str = ""
+    alipay_gateway: str = "https://openapi.alipay.com/gateway.do"
+    alipay_notify_url: str = ""
 
     # 投稿加工是否走 ARQ 异步队列；本地演示默认关闭（同一请求内同步加工）。
     task_queue_enabled: bool = False
