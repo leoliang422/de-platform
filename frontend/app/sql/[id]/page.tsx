@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
+import { ContentInteractions } from "@/components/interactions";
 import { getSqlDetail, type SqlDetail } from "@/lib/api";
 
 export default function SqlDetailPage({
@@ -45,6 +46,7 @@ export default function SqlDetailPage({
               <Prose>{item.answer_md}</Prose>
             </>
           )}
+          <ContentInteractions contentType="sql" contentId={item.id} />
         </>
       )}
     </div>

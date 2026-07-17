@@ -142,6 +142,94 @@ export function getPublicProfile(userId: number): Promise<PublicUserProfile> {
   return request<PublicUserProfile>(`/users/${userId}`);
 }
 
+// ---- Interactions (点赞/收藏/浏览/评论) ----
+export type InteractionContentType = "knowledge" | "sql" | "interview" | "project";
+
+export interface InteractionStats {
+  content_type: string;
+  content_id: number;
+  views: number;
+  likes: number;
+  favorites: number;
+  comments: number;
+  liked: boolean;
+  favorited: boolean;
+}
+
+export interface CommentItem {
+  id: number;
+  user_id: number;
+  author_nickname: string;
+  author_avatar: string | null;
+  parent_id: number | null;
+  body: string;
+  created_at: string;
+}
+
+export interface FavoriteItem {
+  content_type: string;
+  content_id: number;
+  title: string;
+  created_at: string;
+}
+
+export function getInteractionStats(
+  ct: InteractionContentType,
+  id: number,
+  token?: string | null,
+): Promise<InteractionStats> {
+  return request<InteractionStats>(`/interactions/${ct}/${id}`, maybeAuth(token));
+}
+
+export function toggleLike(
+  token: string,
+  ct: InteractionContentType,
+  id: number,
+): Promise<InteractionStats> {
+  return authRequest<InteractionStats>(`/interactions/${ct}/${id}/like`, token, {
+    method: "POST",
+  });
+}
+
+export function toggleFavorite(
+  token: string,
+  ct: InteractionContentType,
+  id: number,
+): Promise<InteractionStats> {
+  return authRequest<InteractionStats>(`/interactions/${ct}/${id}/favorite`, token, {
+    method: "POST",
+  });
+}
+
+export function addView(ct: InteractionContentType, id: number): Promise<{ views: number }> {
+  return request<{ views: number }>(`/interactions/${ct}/${id}/view`, { method: "POST" });
+}
+
+export function getComments(ct: InteractionContentType, id: number): Promise<CommentItem[]> {
+  return request<CommentItem[]>(`/interactions/${ct}/${id}/comments`);
+}
+
+export function createComment(
+  token: string,
+  ct: InteractionContentType,
+  id: number,
+  body: string,
+  parentId?: number | null,
+): Promise<CommentItem> {
+  return authRequest<CommentItem>(`/interactions/${ct}/${id}/comments`, token, {
+    method: "POST",
+    body: JSON.stringify({ body, parent_id: parentId ?? null }),
+  });
+}
+
+export function deleteComment(token: string, commentId: number): Promise<void> {
+  return authRequest<void>(`/interactions/comments/${commentId}`, token, { method: "DELETE" });
+}
+
+export function getMyFavorites(token: string): Promise<FavoriteItem[]> {
+  return authRequest<FavoriteItem[]>("/interactions/me/favorites", token);
+}
+
 // ---- Notifications ----
 export interface Notification {
   id: number;

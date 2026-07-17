@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
+import { ContentInteractions } from "@/components/interactions";
 import { UnlockPanel } from "@/components/unlock";
 import { getAccessToken, getKnowledgeDetail, type KnowledgeDetail } from "@/lib/api";
 
@@ -46,6 +47,7 @@ export default function KnowledgeDetailPage({
           ) : (
             <Prose>{item.content_md ?? ""}</Prose>
           )}
+          <ContentInteractions contentType="knowledge" contentId={item.id} />
         </>
       )}
     </div>
