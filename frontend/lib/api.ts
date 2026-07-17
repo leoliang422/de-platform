@@ -313,16 +313,44 @@ export interface KnowledgeListItem {
   is_paid: boolean;
   price_cash: string | null;
   price_points: number | null;
+  views: number;
+  likes: number;
+  favorites: number;
+  comments: number;
+  hotness: number;
 }
 
-export interface KnowledgeDetail extends KnowledgeListItem {
+export interface KnowledgeListPage {
+  items: KnowledgeListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeDetail {
+  id: number;
+  category_id: number | null;
+  title: string;
+  is_paid: boolean;
+  price_cash: string | null;
+  price_points: number | null;
   locked: boolean;
   content_md: string | null;
 }
 
-export function getKnowledgeList(categoryId?: number): Promise<KnowledgeListItem[]> {
-  const q = categoryId != null ? `?category_id=${categoryId}` : "";
-  return request<KnowledgeListItem[]>(`/knowledge${q}`);
+export function getKnowledgeList(opts?: {
+  categoryId?: number | null;
+  sort?: "hot" | "new";
+  page?: number;
+  pageSize?: number;
+}): Promise<KnowledgeListPage> {
+  const p = new URLSearchParams();
+  if (opts?.categoryId != null) p.set("category_id", String(opts.categoryId));
+  if (opts?.sort) p.set("sort", opts.sort);
+  if (opts?.page) p.set("page", String(opts.page));
+  if (opts?.pageSize) p.set("page_size", String(opts.pageSize));
+  const q = p.toString();
+  return request<KnowledgeListPage>(`/knowledge${q ? `?${q}` : ""}`);
 }
 
 function maybeAuth(token?: string | null): RequestInit {

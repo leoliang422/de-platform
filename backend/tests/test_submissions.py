@@ -59,7 +59,7 @@ async def test_knowledge_submission_review_and_points(
     assert resp.json()["status"] == "published"
 
     resp = await client.get("/knowledge")
-    assert "Hive 小文件治理" in [i["title"] for i in resp.json()]
+    assert "Hive 小文件治理" in [i["title"] for i in resp.json()["items"]]
 
     resp = await client.get("/points/me", headers=_auth(user_token))
     body = resp.json()

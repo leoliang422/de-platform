@@ -41,7 +41,7 @@ async def test_knowledge_list_and_detail(client: AsyncClient, db: AsyncSession) 
 
     resp = await client.get("/knowledge")
     assert resp.status_code == 200
-    titles = [i["title"] for i in resp.json()]
+    titles = [i["title"] for i in resp.json()["items"]]
     assert "数据倾斜" in titles
     assert "草稿" not in titles  # 非 published 不展示
 
