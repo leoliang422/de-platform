@@ -10,6 +10,7 @@ import {
   changeMyPassword,
   getAccessToken,
   updateMyProfile,
+  uploadImage,
 } from "@/lib/api";
 
 export default function SettingsPage() {
@@ -33,6 +34,7 @@ function SettingsInner() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [profileErr, setProfileErr] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -48,6 +50,25 @@ function SettingsInner() {
     setBio(user.bio ?? "");
     setAvatarUrl(user.avatar_url ?? "");
   }, [user]);
+
+  async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const token = getAccessToken();
+    if (!token) return;
+    setUploadingAvatar(true);
+    setProfileErr(null);
+    try {
+      const { url } = await uploadImage(token, file);
+      setAvatarUrl(url);
+      setProfileMsg("头像已上传，记得点「保存资料」生效。");
+    } catch (err) {
+      setProfileErr(err instanceof ApiError ? err.message : "上传失败");
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = "";
+    }
+  }
 
   async function handleProfile(e: FormEvent) {
     e.preventDefault();
@@ -117,12 +138,25 @@ function SettingsInner() {
             className="h-16 w-16 rounded-full border border-slate-200 object-cover"
           />
           <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium text-slate-700">头像链接</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">头像</label>
+            <div className="flex items-center gap-3">
+              <label className="cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                {uploadingAvatar ? "上传中…" : "上传图片"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={handleAvatarFile}
+                  disabled={uploadingAvatar}
+                  className="hidden"
+                />
+              </label>
+              <span className="text-xs text-slate-400">或直接填链接（≤5MB，PNG/JPG/GIF/WEBP）</span>
+            </div>
             <input
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="https://…（图片上传能力将在后续版本提供）"
-              className={inputCls}
+              placeholder="https://…"
+              className={`${inputCls} mt-2`}
             />
           </div>
         </div>

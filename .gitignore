@@ -41,3 +41,7 @@ pnpm-debug.log*
 .docker-data/
 *.local
 coverage/
+
+# ---- Uploaded files (local storage) ----
+backend/uploads/
+uploads/

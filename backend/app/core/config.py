@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     # 投稿加工是否走 ARQ 异步队列；本地演示默认关闭（同一请求内同步加工）。
     task_queue_enabled: bool = False
 
+    # ---- 文件/图片存储 ----
+    # local：存本地磁盘并由后端 /uploads 提供（默认，零外部依赖；Render 磁盘临时）。
+    # s3  ：S3 兼容对象存储（R2/TOS/MinIO）；凭证未配齐时自动回退 local。
+    storage_provider: str = "local"
+    storage_local_dir: str = "uploads"
+    # 公开访问前缀（留空则用请求自身的 base_url 拼接，本地/单域名部署即可）。
+    storage_public_base_url: str = ""
+    # S3 兼容占位配置；获取方式见 docs/deployment.md「文件存储」。
+    s3_endpoint_url: str = ""
+    s3_region: str = ""
+    s3_bucket: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_public_base_url: str = ""
+
     # 豆包（火山方舟 Ark，OpenAI 兼容）；无 key 时回退 MockLLM。
     doubao_api_key: str = ""
     doubao_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"

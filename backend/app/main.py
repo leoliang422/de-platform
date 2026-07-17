@@ -1,11 +1,15 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.modules.admin.content_router import router as admin_content_router
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalog.router import router as catalog_router
+from app.modules.files.router import router as files_router
 from app.modules.interview.router import router as interview_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.payment.router import router as payment_router
@@ -28,6 +32,12 @@ app.add_middleware(
 )
 
 
+# 本地存储：把上传目录挂到 /uploads 提供静态访问（S3 provider 时该目录可空置）。
+_upload_dir = Path(settings.storage_local_dir)
+_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
+
+
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
@@ -35,6 +45,7 @@ async def health() -> dict[str, str]:
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(files_router)
 app.include_router(catalog_router)
 app.include_router(knowledge_router)
 app.include_router(sql_router)

@@ -128,6 +128,27 @@ export function getPublicProfile(userId: number): Promise<PublicUserProfile> {
   return request<PublicUserProfile>(`/users/${userId}`);
 }
 
+export async function uploadImage(token: string, file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE_URL}/files/images`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = `上传失败 (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as { url: string };
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("de_access_token");
