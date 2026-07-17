@@ -62,9 +62,44 @@
 
 | 能力 | 变量 | 说明 |
 |---|---|---|
-| 真实豆包大模型 | `LLM_PROVIDER=doubao` + `DOUBAO_API_KEY=<key>` | 火山方舟 Ark，OpenAI 兼容；无 key 自动回退 mock |
+| 真实大模型（推荐免费智谱 GLM） | `LLM_PROVIDER=zhipu` + `LLM_API_KEY` + `LLM_BASE_URL` + `LLM_MODEL` | OpenAI 兼容，任意厂商通用；无 key 自动回退 mock。详见下方「大模型接入」 |
 | 异步加工队列 | `TASK_QUEUE_ENABLED=true` + `REDIS_URL=<Upstash>` | 需另起 Worker：`arq app.workers.main.WorkerSettings` |
 | 真实支付 | `PAYMENT_PROVIDER=wechat` / `alipay` + 对应凭证 | 见下方「支付接入」；凭证未配齐时**自动回退 mock**，不影响现有功能 |
+
+## 大模型接入（推荐免费的智谱 GLM-4-Flash）
+
+> 现状：默认 `LLM_PROVIDER=mock`（无需外部依赖，投稿加工用确定性的本地整理）。
+> 客户端是**通用 OpenAI 兼容**实现，任意厂商（智谱 / 硅基流动 / 通义百炼 / DeepSeek / 豆包）
+> 都只需换 `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY` 三个变量，不改代码；无 key 时自动回退 mock。
+
+### 一、申请智谱 API Key（免费）
+
+1. 打开智谱开放平台 https://open.bigmodel.cn 或 https://bigmodel.cn ，注册并登录。
+2. 完成**实名认证**（个人手机号即可，无需信用卡）——免费额度需实名后开通。
+3. 进入控制台 → 左侧「API Keys / 密钥管理」→「创建 API Key」→ 复制保存（形如 `xxxxxxxx.xxxxxxxx`）。
+4. 免费模型直接可用：`glm-4-flash`（也可用更新的 `glm-4.5-flash` / `glm-4.7-flash`，均有免费额度）。
+   - 端点（OpenAI 兼容）：`https://open.bigmodel.cn/api/paas/v4`
+   - 鉴权：请求头 `Authorization: Bearer <API_KEY>`（本项目已按此实现）。
+
+### 二、把它加进项目
+
+**本地**（`backend/.env`，参考 `.env.example`）：
+
+```bash
+LLM_PROVIDER=zhipu
+LLM_API_KEY=你的智谱APIKey
+LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+LLM_MODEL=glm-4-flash
+```
+
+**线上（Render）**：后端服务 → Environment → 加上面 4 个变量 → Save（会自动重部署）。
+
+改完即生效：此后「投稿」会调用智谱把原始内容整理成规范 Markdown；调用失败时投稿落 `failed`
+态可在「我的投稿」重试，不影响其它功能。
+
+> 换其它免费厂商同理，只改 `LLM_BASE_URL` / `LLM_MODEL`：
+> 硅基流动 `https://api.siliconflow.cn/v1`、通义百炼 `https://dashscope.aliyuncs.com/compatible-mode/v1`、
+> DeepSeek `https://api.deepseek.com`。旧的 `DOUBAO_*` 变量仍兼容（留空 `LLM_*` 时回退）。
 
 ## 异步加工队列（M5-5B · Upstash Redis + Worker）
 
