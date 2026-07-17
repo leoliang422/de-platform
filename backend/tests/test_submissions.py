@@ -107,16 +107,11 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
         json={
             "target_type": "interview",
             "title": "字节数开一面",
-            "raw_content": "问了数据倾斜和连续登录 SQL。",
+            "raw_content": "问了数据倾斜和连续登录 SQL。整体体验不错。",
             "company_name": "字节跳动",
-            "position": "数据开发工程师",
-            "interview_date": "2026-03",
-            "interview_rounds": 2,
-            "interview_result": "pass",
-            "interview_city": "北京",
-            "interview_channel": "官网投递",
+            "interview_type": "campus",
             "qa_items": [
-                {"section": "technical", "question": "什么是数据倾斜？", "answer": "…"},
+                {"section": "round1", "question": "什么是数据倾斜？", "answer": "…"},
                 {"section": "hr", "question": "职业规划？", "answer": "…"},
             ],
         },
@@ -133,22 +128,21 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     companies = {c["name"]: c["id"] for c in resp.json()}
     assert "字节跳动" in companies
     company_id = companies["字节跳动"]
-    resp = await client.get(f"/companies/{company_id}/interviews")
-    post = resp.json()[0]
-    assert post["position"] == "数据开发工程师"
-    assert post["result"] == "pass"
-    assert post["city"] == "北京"
 
-    # 按岗位聚合
-    groups = (await client.get(f"/companies/{company_id}/positions")).json()
-    assert groups[0]["position"] == "数据开发工程师"
-    assert groups[0]["count"] == 1
+    # 按类型聚合，每篇为一次完整面试（卡片）
+    groups = (await client.get(f"/companies/{company_id}/interviews-by-type")).json()
+    campus = next(g for g in groups if g["interview_type"] == "campus")
+    assert campus["count"] == 1
+    card = campus["posts"][0]
+    assert card["title"] == "字节数开一面"
+    assert set(card["rounds_covered"]) == {"round1", "hr"}
+    assert card["author_nickname"]  # 作者信息随卡片返回
+    assert len(card["qa"]) == 2
 
-    # 详情按技术面 / HR 面拆分问答
-    detail = (await client.get(f"/interviews/{post['id']}")).json()
-    assert len(detail["technical_qa"]) == 1
-    assert len(detail["hr_qa"]) == 1
-    assert detail["technical_qa"][0]["question"] == "什么是数据倾斜？"
+    # 单卡详情
+    detail = (await client.get(f"/interviews/{card['id']}")).json()
+    assert detail["interview_type"] == "campus"
+    assert detail["qa"][0]["question"] == "什么是数据倾斜？"
 
     resp = await client.get("/points/me", headers=_auth(user_token))
     assert resp.json()["balance"] == 20

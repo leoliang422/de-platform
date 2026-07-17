@@ -8,8 +8,8 @@ TargetType = Literal["knowledge", "sql", "interview", "project"]
 
 
 class InterviewQAIn(BaseModel):
-    # 上传时即区分技术面 / HR 面，以及问题与答案。
-    section: Literal["technical", "hr"] = "technical"
+    # 上传时即区分所属轮次（一面/二面/三面/HR面），以及问题与答案。
+    section: Literal["round1", "round2", "round3", "hr"] = "round1"
     question: str = Field(default="", max_length=4000)
     answer: str = Field(default="", max_length=8000)
 
@@ -34,13 +34,7 @@ class SubmissionCreate(BaseModel):
 
     # interview
     company_name: str | None = None
-    position: str | None = None
-    position_level: str | None = None
-    interview_date: str | None = None
-    interview_rounds: int | None = None
-    interview_result: Literal["pass", "fail", "pending", "unknown"] | None = None
-    interview_city: str | None = None
-    interview_channel: str | None = None
+    interview_type: Literal["social", "campus", "daily", "summer"] | None = None
     qa_items: list[InterviewQAIn] | None = None
 
     # project

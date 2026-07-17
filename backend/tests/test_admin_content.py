@@ -87,7 +87,13 @@ async def test_admin_interview_and_project_create(client: AsyncClient, db: Async
     resp = await client.post(
         "/admin/content/interview",
         headers=_auth(admin_token),
-        json={"company_name": "字节跳动", "position": "数据开发", "content_md": "一面二面"},
+        json={
+            "company_name": "字节跳动",
+            "title": "数据开发一面",
+            "interview_type": "campus",
+            "content_md": "一面二面",
+            "qa_items": [{"section": "round1", "question": "Q", "answer": "A"}],
+        },
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["subtitle"] == "字节跳动"

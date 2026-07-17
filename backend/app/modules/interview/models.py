@@ -3,10 +3,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
-# 面经问答所属环节：技术面 / HR 面。
-QA_SECTIONS = ("technical", "hr")
-# 面试结果。
-INTERVIEW_RESULTS = ("pass", "fail", "pending", "unknown")
+# 面经类型：社招 / 校招 / 日常实习 / 暑期实习。
+INTERVIEW_TYPES = ("social", "campus", "daily", "summer")
+# 面试轮次（问答归属）：一面 / 二面 / 三面 / HR 面。
+ROUND_SECTIONS = ("round1", "round2", "round3", "hr")
 
 
 class Company(Base):
@@ -24,29 +24,26 @@ class InterviewPost(Base):
     company_id: Mapped[int] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    position: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
-    # 整体感受/概述（可选）；结构化问答见 InterviewQA。
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    # 类型：social / campus / daily / summer
+    interview_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    # 整体感受 / 概述
     content_md: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    # 面试元信息
-    position_level: Mapped[str | None] = mapped_column(String(60), nullable=True)
-    interview_date: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    rounds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    result: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    city: Mapped[str | None] = mapped_column(String(60), nullable=True)
-    channel: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # 兼容旧库列（不再对外使用）：保留默认空串以满足历史 NOT NULL 约束。
+    position: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(20), default="published", nullable=False)
     author_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     qa: Mapped[list["InterviewQA"]] = relationship(
         "InterviewQA",
         cascade="all, delete-orphan",
-        order_by="InterviewQA.section, InterviewQA.order_index, InterviewQA.id",
+        order_by="InterviewQA.order_index, InterviewQA.id",
         lazy="selectin",
     )
 
 
 class InterviewQA(Base):
-    """面经中的一问一答，归属技术面或 HR 面。"""
+    """面经中的一问一答，归属某一轮次（一面/二面/三面/HR 面）。"""
 
     __tablename__ = "interview_qa"
 

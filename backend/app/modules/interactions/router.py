@@ -43,7 +43,7 @@ async def toggle_like(
     db: AsyncSession = Depends(get_db),
 ) -> StatsOut:
     return await InteractionService(db).toggle_reaction(
-        current_user.id, content_type, content_id, "like"
+        current_user, content_type, content_id, "like"
     )
 
 
@@ -55,7 +55,7 @@ async def toggle_favorite(
     db: AsyncSession = Depends(get_db),
 ) -> StatsOut:
     return await InteractionService(db).toggle_reaction(
-        current_user.id, content_type, content_id, "favorite"
+        current_user, content_type, content_id, "favorite"
     )
 
 

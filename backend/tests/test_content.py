@@ -73,7 +73,8 @@ async def test_interview_by_company(client: AsyncClient, db: AsyncSession) -> No
     db.add(
         InterviewPost(
             company_id=company.id,
-            position="数据开发",
+            title="数据开发一面",
+            interview_type="campus",
             content_md="面试内容",
             status="published",
         )
@@ -85,9 +86,10 @@ async def test_interview_by_company(client: AsyncClient, db: AsyncSession) -> No
     assert resp.status_code == 200
     assert resp.json()[0]["name"] == "字节跳动"
 
-    resp = await client.get(f"/companies/{company.id}/interviews")
+    resp = await client.get(f"/companies/{company.id}/interviews-by-type")
     assert resp.status_code == 200
-    assert resp.json()[0]["position"] == "数据开发"
+    campus = next(g for g in resp.json() if g["interview_type"] == "campus")
+    assert campus["posts"][0]["title"] == "数据开发一面"
 
 
 async def test_project_paid_is_locked(client: AsyncClient, db: AsyncSession) -> None:

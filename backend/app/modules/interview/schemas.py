@@ -19,29 +19,24 @@ class InterviewQAOut(BaseModel):
     answer: str
 
 
-class InterviewPostListItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class InterviewCardOut(BaseModel):
+    """一次完整面试（一张卡片）。"""
 
     id: int
     company_id: int
-    position: str
-    position_level: str | None = None
-    interview_date: str | None = None
-    rounds: int | None = None
-    result: str | None = None
-    city: str | None = None
-    channel: str | None = None
-
-
-class InterviewPostDetail(InterviewPostListItem):
+    title: str
+    interview_type: str | None = None
     content_md: str
-    technical_qa: list[InterviewQAOut] = []
-    hr_qa: list[InterviewQAOut] = []
+    author_id: int | None = None
+    author_nickname: str = "匿名用户"
+    author_avatar: str | None = None
+    rounds_covered: list[str] = []
+    qa: list[InterviewQAOut] = []
 
 
-class PositionGroup(BaseModel):
-    """同一企业下按岗位聚合的面经。"""
+class InterviewTypeGroup(BaseModel):
+    """按面经类型聚合。"""
 
-    position: str
+    interview_type: str
     count: int
-    posts: list[InterviewPostListItem]
+    posts: list[InterviewCardOut]

@@ -27,12 +27,20 @@ _CONTENT_PATH = {
     "knowledge": "/knowledge",
     "sql": "/sql",
     "project": "/projects",
+    "interview": "/interview",
 }
 
 
 def _validate_type(content_type: str) -> None:
     if content_type not in CONTENT_TYPES:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="内容类型不存在")
+
+
+def _link_for(ct: str, cid: int) -> str | None:
+    if ct == "interview":
+        return "/interview"  # 卡片在企业页展开，暂指向面经入口
+    base = _CONTENT_PATH.get(ct)
+    return f"{base}/{cid}" if base else None
 
 
 class InteractionService:
@@ -83,12 +91,12 @@ class InteractionService:
             favorited=favorited,
         )
 
-    async def toggle_reaction(self, user_id: int, ct: str, cid: int, kind: str) -> StatsOut:
+    async def toggle_reaction(self, actor: User, ct: str, cid: int, kind: str) -> StatsOut:
         _validate_type(ct)
         if kind not in REACTION_KINDS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的操作")
         stmt = select(Reaction).where(
-            Reaction.user_id == user_id,
+            Reaction.user_id == actor.id,
             Reaction.content_type == ct,
             Reaction.content_id == cid,
             Reaction.kind == kind,
@@ -97,9 +105,47 @@ class InteractionService:
         if existing is not None:
             await self.db.delete(existing)
         else:
-            self.db.add(Reaction(user_id=user_id, content_type=ct, content_id=cid, kind=kind))
+            self.db.add(Reaction(user_id=actor.id, content_type=ct, content_id=cid, kind=kind))
+            # 仅新增（点赞/收藏）时通知内容作者
+            await self._notify_owner(
+                actor,
+                ct,
+                cid,
+                type=kind,
+                title="有人赞了你的内容" if kind == "like" else "有人收藏了你的内容",
+                verb="赞了" if kind == "like" else "收藏了",
+            )
         await self.db.commit()
-        return await self.get_stats(ct, cid, user_id)
+        return await self.get_stats(ct, cid, actor.id)
+
+    async def _owner_of(self, ct: str, cid: int) -> int | None:
+        if ct == "knowledge":
+            item = await self.db.get(KnowledgeItem, cid)
+            return item.author_id if item else None
+        if ct == "sql":
+            q = await self.db.get(SqlQuestion, cid)
+            return q.author_id if q else None
+        if ct == "project":
+            p = await self.db.get(Project, cid)
+            return p.author_id if p else None
+        if ct == "interview":
+            post = await self.db.get(InterviewPost, cid)
+            return post.author_id if post else None
+        return None
+
+    async def _notify_owner(
+        self, actor: User, ct: str, cid: int, *, type: str, title: str, verb: str
+    ) -> None:
+        owner_id = await self._owner_of(ct, cid)
+        if owner_id is None or owner_id == actor.id:
+            return
+        await NotificationService(self.db).notify(
+            user_id=owner_id,
+            type=type,
+            title=title,
+            body=f"{actor.nickname} {verb}你的内容",
+            link=_link_for(ct, cid),
+        )
 
     async def add_view(self, ct: str, cid: int) -> int:
         _validate_type(ct)
@@ -158,16 +204,32 @@ class InteractionService:
         self.db.add(comment)
         await self.db.flush()
 
+        notifier = NotificationService(self.db)
+        link = _link_for(ct, cid)
+        notified: set[int] = {user.id}
+
         # 回复他人评论时通知对方
-        if parent is not None and parent.user_id != user.id:
-            link = _CONTENT_PATH.get(ct)
-            await NotificationService(self.db).notify(
+        if parent is not None and parent.user_id not in notified:
+            await notifier.notify(
                 user_id=parent.user_id,
                 type="comment",
                 title="收到新回复",
                 body=f"{user.nickname} 回复了你的评论：{body[:50]}",
-                link=f"{link}/{cid}" if link else None,
+                link=link,
             )
+            notified.add(parent.user_id)
+
+        # 通知内容作者（卡片主人）
+        owner_id = await self._owner_of(ct, cid)
+        if owner_id is not None and owner_id not in notified:
+            await notifier.notify(
+                user_id=owner_id,
+                type="comment",
+                title="有人评论了你的内容",
+                body=f"{user.nickname} 评论：{body[:50]}",
+                link=link,
+            )
+
         await self.db.commit()
         await self.db.refresh(comment)
         return comment
@@ -193,7 +255,7 @@ class InteractionService:
             return p.title if p else None
         if ct == "interview":
             post = await self.db.get(InterviewPost, cid)
-            return post.position if post else None
+            return post.title if post else None
         return None
 
     async def list_favorites(self, user_id: int) -> list[FavoriteItem]:

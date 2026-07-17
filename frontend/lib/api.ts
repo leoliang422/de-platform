@@ -363,18 +363,6 @@ export interface Company {
   logo_url: string | null;
 }
 
-export interface InterviewListItem {
-  id: number;
-  company_id: number;
-  position: string;
-  position_level: string | null;
-  interview_date: string | null;
-  rounds: number | null;
-  result: string | null;
-  city: string | null;
-  channel: string | null;
-}
-
 export interface InterviewQA {
   id: number;
   section: string;
@@ -383,39 +371,55 @@ export interface InterviewQA {
   answer: string;
 }
 
-export interface InterviewDetail extends InterviewListItem {
+export interface InterviewCard {
+  id: number;
+  company_id: number;
+  title: string;
+  interview_type: string | null;
   content_md: string;
-  technical_qa: InterviewQA[];
-  hr_qa: InterviewQA[];
+  author_id: number | null;
+  author_nickname: string;
+  author_avatar: string | null;
+  rounds_covered: string[];
+  qa: InterviewQA[];
 }
 
-export interface PositionGroup {
-  position: string;
+export interface InterviewTypeGroup {
+  interview_type: string;
   count: number;
-  posts: InterviewListItem[];
+  posts: InterviewCard[];
 }
 
-export const INTERVIEW_RESULT_LABEL: Record<string, string> = {
-  pass: "已通过",
-  fail: "未通过",
-  pending: "流程中",
-  unknown: "未知",
+export const INTERVIEW_TYPE_LABEL: Record<string, string> = {
+  daily: "日常实习",
+  summer: "暑期实习",
+  campus: "校招",
+  social: "社招",
+  other: "其他",
 };
+
+// 展示顺序：日常实习 → 暑期实习 → 校招 → 社招
+export const INTERVIEW_TYPE_ORDER = ["daily", "summer", "campus", "social", "other"];
+
+export const INTERVIEW_ROUND_LABEL: Record<string, string> = {
+  round1: "一面",
+  round2: "二面",
+  round3: "三面",
+  hr: "HR面",
+};
+
+export const INTERVIEW_ROUND_ORDER = ["round1", "round2", "round3", "hr"];
 
 export function getCompanies(): Promise<Company[]> {
   return request<Company[]>("/companies");
 }
 
-export function getCompanyPositions(companyId: number): Promise<PositionGroup[]> {
-  return request<PositionGroup[]>(`/companies/${companyId}/positions`);
+export function getCompanyInterviewsByType(companyId: number): Promise<InterviewTypeGroup[]> {
+  return request<InterviewTypeGroup[]>(`/companies/${companyId}/interviews-by-type`);
 }
 
-export function getCompanyInterviews(companyId: number): Promise<InterviewListItem[]> {
-  return request<InterviewListItem[]>(`/companies/${companyId}/interviews`);
-}
-
-export function getInterviewDetail(id: number): Promise<InterviewDetail> {
-  return request<InterviewDetail>(`/interviews/${id}`);
+export function getInterviewDetail(id: number): Promise<InterviewCard> {
+  return request<InterviewCard>(`/interviews/${id}`);
 }
 
 // ---- Projects ----
@@ -454,7 +458,7 @@ export function getProjectDetail(id: number, token?: string | null): Promise<Pro
 export type TargetType = "knowledge" | "sql" | "interview" | "project";
 
 export interface InterviewQAInput {
-  section: "technical" | "hr";
+  section: "round1" | "round2" | "round3" | "hr";
   question: string;
   answer: string;
 }
@@ -471,13 +475,7 @@ export interface SubmissionCreateInput {
   difficulty?: string | null;
   tags?: string | null;
   company_name?: string | null;
-  position?: string | null;
-  position_level?: string | null;
-  interview_date?: string | null;
-  interview_rounds?: number | null;
-  interview_result?: "pass" | "fail" | "pending" | "unknown" | null;
-  interview_city?: string | null;
-  interview_channel?: string | null;
+  interview_type?: "social" | "campus" | "daily" | "summer" | null;
   qa_items?: InterviewQAInput[] | null;
   level?: string | null;
   access_type?: "free" | "paid" | null;
