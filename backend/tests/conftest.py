@@ -3,6 +3,10 @@ import os
 # Point the app at an in-memory sqlite DB *before* importing app modules,
 # so the module-level engine is created with the sqlite driver.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+# 测试固定用 MockLLM，并清空大模型凭证，避免读到开发者本地 .env 的真实配置而发起网络调用。
+os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_API_KEY"] = ""
+os.environ["DOUBAO_API_KEY"] = ""
 
 from collections.abc import AsyncGenerator  # noqa: E402
 

@@ -307,6 +307,47 @@ export async function extractFile(token: string, file: File): Promise<ExtractRes
   return (await res.json()) as ExtractResult;
 }
 
+export interface ParseResult {
+  target_type: TargetType;
+  items: Record<string, unknown>[];
+}
+
+export async function parseSubmission(
+  token: string,
+  input: { targetType: TargetType; text?: string; file?: File | null },
+): Promise<ParseResult> {
+  const form = new FormData();
+  form.append("target_type", input.targetType);
+  if (input.text) form.append("text", input.text);
+  if (input.file) form.append("file", input.file);
+  const res = await fetch(`${API_BASE_URL}/submissions/parse`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = `解析失败 (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as ParseResult;
+}
+
+export function completeAnswer(
+  token: string,
+  input: { target_type: TargetType; question: string; context?: string },
+): Promise<{ answer: string }> {
+  return authRequest<{ answer: string }>("/submissions/complete-answer", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("de_access_token");

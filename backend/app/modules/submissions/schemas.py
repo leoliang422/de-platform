@@ -59,3 +59,18 @@ class SubmissionOut(BaseModel):
 
 class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class ParseResult(BaseModel):
+    target_type: str
+    items: list[dict]
+
+
+class CompleteAnswerIn(BaseModel):
+    target_type: TargetType
+    question: str = Field(min_length=1, max_length=4000)
+    context: str = Field(default="", max_length=8000)
+
+
+class CompleteAnswerOut(BaseModel):
+    answer: str

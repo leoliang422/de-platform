@@ -138,6 +138,10 @@
 - [x] `P1` **知识树 MVP**：每个大类一棵可交互知识树（`/knowledge/tree/[categoryId]`），节点旁 + 就地提议子知识点（登录用户走审核；管理员直接上线），叶子可链接八股（点击跳转）；后台「知识树待审」通过/驳回 + 提议者站内通知（模型 `knowledge_nodes`，迁移 0011）
 - [x] `P1` **面经再精简**：去掉标题与整体感受（投稿表单 + 卡片展示 + 后台表单均去除；内部标题回落为企业名）
 - [x] `P1` **八股分类改用下拉**：去掉后台手填「分类 ID」，改为分类下拉选择（八股/SQL）；保留左侧分类侧栏
+- [x] `P1` **投稿本地文件导入**：文本/Markdown 直接读、图片内联展示、Word(.docx)/PDF 本地抽取文字（python-docx/pdfplumber，不依赖大模型）
+- [x] `P1` **大模型配置通用化**：`OpenAICompatClient` + `LLM_*` 通用变量，任意 OpenAI 兼容厂商（智谱 GLM 等）即插即用
+- [x] `P1` **大模型批量投稿（第一批：Word/PDF/文本）**：`POST /submissions/parse` 结构化拆分为多条草稿（八股/SQL/面经），前端可编辑草稿卡片 + 批量提交；`POST /submissions/complete-answer` AI 补全答案（缺答案时人工 review）；顶部导航栏加四大模块入口
+- [ ] `P1` **大模型批量投稿（第二批）**：图片 OCR（多模态 `glm-4v-flash`，加 `LLM_VISION_MODEL`）+ 项目模块覆盖
 - `P1` 项目 **QA 后台编辑**（当前缺）
 - `P1` 标签体系 + 全文搜索（先 Postgres 全文，量大再上 ES）
 - `P2` 草稿箱 / 内容版本
