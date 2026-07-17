@@ -91,6 +91,20 @@ export function login(input: {
   });
 }
 
+export function forgotPassword(email: string): Promise<{ sent: boolean; reset_token: string | null }> {
+  return request<{ sent: boolean; reset_token: string | null }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<void> {
+  return request<void>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
 export function getMe(accessToken: string): Promise<UserProfile> {
   return request<UserProfile>("/users/me", {
     headers: { Authorization: `Bearer ${accessToken}` },

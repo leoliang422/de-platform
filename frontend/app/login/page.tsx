@@ -56,12 +56,17 @@ export default function LoginPage() {
           {submitting ? "登录中…" : "登录"}
         </button>
       </form>
-      <p className="mt-4 text-sm text-slate-600">
-        还没有账号？{" "}
-        <Link href="/register" className="font-medium text-brand-600">
-          去注册
+      <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+        <span>
+          还没有账号？{" "}
+          <Link href="/register" className="font-medium text-brand-600">
+            去注册
+          </Link>
+        </span>
+        <Link href="/forgot-password" className="text-brand-600 hover:underline">
+          忘记密码？
         </Link>
-      </p>
+      </div>
     </div>
   );
 }

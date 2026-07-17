@@ -88,6 +88,21 @@
 > 本地联调：`export TASK_QUEUE_ENABLED=true REDIS_URL=redis://localhost:6379/0`，
 > 另开一终端在 `backend/` 跑 `arq app.workers.main.WorkerSettings`。不设时保持同步加工。
 
+## 邮件发送（找回密码 · M6.3）
+
+> 现状：默认 `EMAIL_PROVIDER=mock`，**不真正发信**，仅记录日志；`/auth/forgot-password`
+> 会在响应里返回 `reset_token`（仅 mock 通道）便于本地自测。抽象层已支持切换真实 SMTP，
+> 凭证未配齐时自动回退 mock，不影响现有功能。
+
+切换真实邮件（任选一个 SMTP 服务：Resend / 阿里云邮件推送 / SendGrid / Gmail 应用专用密码等）：
+
+1. 在邮件服务商拿到 SMTP 主机、端口、用户名、密码（或 API Key）、发件人地址。
+2. Render 后端 Environment 填 `EMAIL_PROVIDER=smtp` + `SMTP_HOST/PORT/USER/PASSWORD/FROM`，
+   并设 `FRONTEND_BASE_URL=https://<你的前端域名>`（用于拼接重置链接）。
+3. 代码里 `SmtpEmailSender.send()` 标了 `TODO(M6-real)`（用 aiosmtplib / smtplib 发送），补齐后即用。
+
+> 切到真实 SMTP 后，`forgot-password` 不再返回 `reset_token`，用户从邮件链接进入重置页。
+
 ## 文件存储（图片上传 · M6.2）
 
 > 现状：默认 `STORAGE_PROVIDER=local`，图片存后端本地磁盘并由 `/uploads` 提供访问，
