@@ -142,6 +142,33 @@ export function getPublicProfile(userId: number): Promise<PublicUserProfile> {
   return request<PublicUserProfile>(`/users/${userId}`);
 }
 
+// ---- Notifications ----
+export interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export function getNotifications(token: string): Promise<Notification[]> {
+  return authRequest<Notification[]>("/notifications", token);
+}
+
+export function getUnreadCount(token: string): Promise<{ unread: number }> {
+  return authRequest<{ unread: number }>("/notifications/unread_count", token);
+}
+
+export function markNotificationRead(token: string, id: number): Promise<Notification> {
+  return authRequest<Notification>(`/notifications/${id}/read`, token, { method: "POST" });
+}
+
+export function markAllNotificationsRead(token: string): Promise<{ unread: number }> {
+  return authRequest<{ unread: number }>("/notifications/read-all", token, { method: "POST" });
+}
+
 export async function uploadImage(token: string, file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append("file", file);

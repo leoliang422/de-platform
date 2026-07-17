@@ -1,11 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
+import { getAccessToken, getUnreadCount } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export function Navbar() {
   const { user, loading, logout } = useAuth();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      setUnread(0);
+      return;
+    }
+    const poll = () => {
+      const token = getAccessToken();
+      if (!token) return;
+      getUnreadCount(token)
+        .then((r) => setUnread(r.unread))
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, 30000);
+    return () => clearInterval(timer);
+  }, [user]);
 
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
@@ -32,6 +52,17 @@ export function Navbar() {
                   管理
                 </Link>
               )}
+              <Link
+                href="/me/notifications"
+                className="relative rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"
+              >
+                通知
+                {unread > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+              </Link>
               <Link
                 href="/me"
                 className="text-slate-600 hover:text-slate-900"
