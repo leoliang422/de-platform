@@ -5,8 +5,20 @@ export interface UserProfile {
   id: number;
   email: string;
   nickname: string;
+  avatar_url: string | null;
+  bio: string | null;
+  job_title: string | null;
   role: string;
   points_balance: number;
+  created_at: string;
+}
+
+export interface PublicUserProfile {
+  id: number;
+  nickname: string;
+  avatar_url: string | null;
+  bio: string | null;
+  job_title: string | null;
   created_at: string;
 }
 
@@ -83,6 +95,37 @@ export function getMe(accessToken: string): Promise<UserProfile> {
   return request<UserProfile>("/users/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+export function updateMyProfile(
+  token: string,
+  input: {
+    nickname?: string;
+    avatar_url?: string | null;
+    bio?: string | null;
+    job_title?: string | null;
+  },
+): Promise<UserProfile> {
+  return request<UserProfile>("/users/me", {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function changeMyPassword(
+  token: string,
+  input: { old_password: string; new_password: string },
+): Promise<void> {
+  return request<void>("/users/me/password", {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function getPublicProfile(userId: number): Promise<PublicUserProfile> {
+  return request<PublicUserProfile>(`/users/${userId}`);
 }
 
 export function getAccessToken(): string | null {

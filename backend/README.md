@@ -77,6 +77,9 @@ tests/        # pytest（sqlite 内存库）
 - 健康检查 `GET /health`
 - 注册 / 登录 / 刷新 `POST /auth/register|login|refresh`
 - 当前用户 `GET /users/me`（需 Bearer token）
+- 个人资料编辑 `PATCH /users/me`（昵称/简介/职业标签/头像 URL，部分字段可选）
+- 修改密码 `PATCH /users/me/password`（校验原密码，新旧不可相同）
+- 公开资料 `GET /users/{id}`（不含邮箱等敏感信息）
 
 ### M1 · 内容浏览（只读）
 - 分类树 `GET /categories?section=`
