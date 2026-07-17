@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 
 import { PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
+import { MarkdownTextarea } from "@/components/markdown-textarea";
 import { useAuth } from "@/lib/auth";
 import {
   ApiError,
@@ -518,12 +519,13 @@ function SubmitInner() {
                   </button>
                 </div>
                 {targetType === "knowledge" && (
-                  <textarea
+                  <MarkdownTextarea
                     value={d.content_md}
-                    onChange={(e) => updateDraft(i, { content_md: e.target.value })}
+                    onChange={(v) => updateDraft(i, { content_md: v })}
                     placeholder="正文（Markdown）"
                     rows={4}
                     className={inputCls}
+                    hint={false}
                   />
                 )}
                 {targetType === "sql" && (
@@ -565,19 +567,21 @@ function SubmitInner() {
                 )}
                 {targetType === "project" && (
                   <>
-                    <textarea
+                    <MarkdownTextarea
                       value={d.description_md}
-                      onChange={(e) => updateDraft(i, { description_md: e.target.value })}
+                      onChange={(v) => updateDraft(i, { description_md: v })}
                       placeholder="项目描述（Markdown）"
                       rows={3}
                       className={inputCls}
+                      hint={false}
                     />
-                    <textarea
+                    <MarkdownTextarea
                       value={d.implementation_md}
-                      onChange={(e) => updateDraft(i, { implementation_md: e.target.value })}
+                      onChange={(v) => updateDraft(i, { implementation_md: v })}
                       placeholder="实现说明（可选）"
                       rows={2}
                       className={inputCls}
+                      hint={false}
                     />
                   </>
                 )}
@@ -681,12 +685,13 @@ function SubmitInner() {
                       placeholder="问题"
                       className={`${inputCls} mb-2`}
                     />
-                    <textarea
+                    <MarkdownTextarea
                       value={qa.answer}
-                      onChange={(e) => updateQa(i, { answer: e.target.value })}
+                      onChange={(v) => updateQa(i, { answer: v })}
                       placeholder="答案 / 参考回答（可选，可点下方 AI 生成后人工确认）"
                       rows={2}
                       className={inputCls}
+                      hint={false}
                     />
                     <button
                       type="button"
@@ -753,9 +758,9 @@ function SubmitInner() {
             )}
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">项目实现</label>
-              <textarea
+              <MarkdownTextarea
                 value={implementation}
-                onChange={(e) => setImplementation(e.target.value)}
+                onChange={setImplementation}
                 rows={4}
                 className={inputCls}
               />
@@ -769,7 +774,7 @@ function SubmitInner() {
               {targetType === "sql" ? "解答 / 思路（原始内容）" : "正文（原始内容）"}
             </label>
             <FileImportField onInsert={(t) => setRaw((p) => (p ? `${p}\n\n${t}` : t))} />
-            <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} required className={inputCls} />
+            <MarkdownTextarea value={raw} onChange={setRaw} rows={6} required className={inputCls} />
           </div>
         )}
 
