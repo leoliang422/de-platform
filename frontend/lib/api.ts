@@ -410,12 +410,14 @@ export interface KnowledgeDetail {
 
 export function getKnowledgeList(opts?: {
   categoryId?: number | null;
+  q?: string | null;
   sort?: "hot" | "new";
   page?: number;
   pageSize?: number;
 }): Promise<KnowledgeListPage> {
   const p = new URLSearchParams();
   if (opts?.categoryId != null) p.set("category_id", String(opts.categoryId));
+  if (opts?.q && opts.q.trim()) p.set("q", opts.q.trim());
   if (opts?.sort) p.set("sort", opts.sort);
   if (opts?.page) p.set("page", String(opts.page));
   if (opts?.pageSize) p.set("page_size", String(opts.pageSize));

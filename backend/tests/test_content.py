@@ -50,6 +50,36 @@ async def test_knowledge_list_and_detail(client: AsyncClient, db: AsyncSession) 
     assert resp.json()["content_md"] == "# body"
 
 
+async def test_knowledge_search(client: AsyncClient, db: AsyncSession) -> None:
+    db.add_all(
+        [
+            KnowledgeItem(title="Hive 数据倾斜", content_md="skew body", status="published"),
+            KnowledgeItem(
+                title="Spark 宽窄依赖", content_md="讲到数据倾斜的处理", status="published"
+            ),
+            KnowledgeItem(title="Kafka 分区", content_md="无关内容", status="published"),
+        ]
+    )
+    await db.commit()
+
+    # 命中标题
+    resp = await client.get("/knowledge", params={"q": "Hive"})
+    assert resp.status_code == 200
+    titles = [i["title"] for i in resp.json()["items"]]
+    assert titles == ["Hive 数据倾斜"]
+
+    # 命中标题或正文（两条都含“数据倾斜”）
+    resp = await client.get("/knowledge", params={"q": "数据倾斜"})
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert titles == {"Hive 数据倾斜", "Spark 宽窄依赖"}
+
+    # 无命中
+    resp = await client.get("/knowledge", params={"q": "不存在的关键词"})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
 async def test_sql_tags_split(client: AsyncClient, db: AsyncSession) -> None:
     q = SqlQuestion(
         title="连续登录",
