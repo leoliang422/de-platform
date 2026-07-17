@@ -28,7 +28,15 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # mock（默认，无需外部依赖）| 任意非 mock 值（如 zhipu/doubao/siliconflow）启用真实大模型。
     llm_provider: str = "mock"
+
+    # ---- 通用 OpenAI 兼容大模型（推荐；智谱 GLM / 硅基流动 / 通义百炼 / DeepSeek 等）----
+    # 把 LLM_PROVIDER 设为非 mock，并填以下三项即可；留空时回退旧的 DOUBAO_* 或 mock。
+    # 获取方式（以免费的智谱 glm-4-flash 为例）见 docs/deployment.md「大模型接入」。
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_model: str = ""
     # 支付通道：mock（默认，同步结算）| wechat | alipay。
     # 选 wechat/alipay 但凭证未配齐时，工厂会自动回退到 mock（见 payment/provider.py）。
     payment_provider: str = "mock"

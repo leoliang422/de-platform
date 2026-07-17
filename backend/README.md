@@ -91,7 +91,7 @@ tests/        # pytest（sqlite 内存库）
 ### M2 · 投稿 + 大模型加工 + 审核 + 积分
 - 投稿 `POST /submissions`、我的投稿 `GET /submissions/me`
   - 状态机：`draft → processing → pending_review → published / rejected`
-  - LLM 抽象（`MockLLM` / `DoubaoClient`），无 key 回退 mock
+  - LLM 抽象（`MockLLM` / `OpenAICompatClient`，任意 OpenAI 兼容厂商通用），无 key 回退 mock
 - 积分 `GET /points/me`（余额 + 账本，发放以 `(ref_type, ref_id)` 幂等）
 - 管理后台（需 `admin` 角色）
   - 审核队列 `GET /admin/submissions?status=`

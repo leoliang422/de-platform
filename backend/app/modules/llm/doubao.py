@@ -3,11 +3,12 @@ from __future__ import annotations
 from app.modules.llm.base import template_for
 
 
-class DoubaoClient:
-    """豆包（火山方舟 Ark，OpenAI 兼容 chat/completions）。
+class OpenAICompatClient:
+    """通用 OpenAI 兼容 chat/completions 客户端。
 
-    仅在 ``LLM_PROVIDER=doubao`` 且配置了 API key 时启用；网络调用失败时抛出，
-    由上层处理（投稿保持 processing/失败态，可重试）。
+    适配任意 OpenAI 兼容厂商（豆包 / 智谱 GLM / 硅基流动 / 通义百炼 / DeepSeek 等），
+    只需换 ``base_url`` / ``model`` / ``api_key``。网络调用失败时抛出，由上层处理
+    （投稿保持 processing/失败态，可重试）。
     """
 
     def __init__(self, api_key: str, base_url: str, model: str) -> None:
@@ -34,3 +35,7 @@ class DoubaoClient:
             resp.raise_for_status()
             data = resp.json()
         return data["choices"][0]["message"]["content"]
+
+
+# 向后兼容：旧名保留为别名。
+DoubaoClient = OpenAICompatClient
