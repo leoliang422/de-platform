@@ -11,6 +11,7 @@ import {
   getAccessToken,
   getMySubmissions,
   retrySubmission,
+  type InterviewQAInput,
   type Submission,
   type SubmissionCreateInput,
   type TargetType,
@@ -59,6 +60,17 @@ function SubmitInner() {
   const [tags, setTags] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [position, setPosition] = useState("");
+  const [positionLevel, setPositionLevel] = useState("");
+  const [interviewDate, setInterviewDate] = useState("");
+  const [interviewRounds, setInterviewRounds] = useState("");
+  const [interviewResult, setInterviewResult] = useState<
+    "pass" | "fail" | "pending" | "unknown"
+  >("unknown");
+  const [interviewCity, setInterviewCity] = useState("");
+  const [interviewChannel, setInterviewChannel] = useState("");
+  const [qaItems, setQaItems] = useState<InterviewQAInput[]>([
+    { section: "technical", question: "", answer: "" },
+  ]);
   const [level, setLevel] = useState("basic");
   const [accessType, setAccessType] = useState<"free" | "paid">("free");
   const [implementation, setImplementation] = useState("");
@@ -105,6 +117,18 @@ function SubmitInner() {
     }
   }
 
+  function updateQa(index: number, patch: Partial<InterviewQAInput>) {
+    setQaItems((prev) => prev.map((q, i) => (i === index ? { ...q, ...patch } : q)));
+  }
+
+  function addQa(section: "technical" | "hr") {
+    setQaItems((prev) => [...prev, { section, question: "", answer: "" }]);
+  }
+
+  function removeQa(index: number) {
+    setQaItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -122,6 +146,17 @@ function SubmitInner() {
       tags: targetType === "sql" ? tags : undefined,
       company_name: targetType === "interview" ? companyName : undefined,
       position: targetType === "interview" ? position : undefined,
+      position_level: targetType === "interview" ? positionLevel || null : undefined,
+      interview_date: targetType === "interview" ? interviewDate || null : undefined,
+      interview_rounds:
+        targetType === "interview" && interviewRounds ? Number(interviewRounds) : undefined,
+      interview_result: targetType === "interview" ? interviewResult : undefined,
+      interview_city: targetType === "interview" ? interviewCity || null : undefined,
+      interview_channel: targetType === "interview" ? interviewChannel || null : undefined,
+      qa_items:
+        targetType === "interview"
+          ? qaItems.filter((q) => q.question.trim() || q.answer.trim())
+          : undefined,
       level: targetType === "project" ? level : undefined,
       access_type: targetType === "project" ? accessType : undefined,
       implementation_md: targetType === "project" ? implementation : undefined,
@@ -143,6 +178,7 @@ function SubmitInner() {
       setRaw("");
       setPromptMd("");
       setImplementation("");
+      setQaItems([{ section: "technical", question: "", answer: "" }]);
       loadMine();
       await refreshUser();
     } catch (err) {
@@ -210,14 +246,100 @@ function SubmitInner() {
         )}
 
         {targetType === "interview" && (
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-slate-700">企业名称</label>
-              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required className={inputCls} />
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="mb-1 block text-sm font-medium text-slate-700">企业名称</label>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required className={inputCls} />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-sm font-medium text-slate-700">岗位（相同岗位会自动合并）</label>
+                <input value={position} onChange={(e) => setPosition(e.target.value)} required className={inputCls} />
+              </div>
             </div>
-            <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-slate-700">岗位</label>
-              <input value={position} onChange={(e) => setPosition(e.target.value)} required className={inputCls} />
+            <div className="flex flex-wrap gap-3">
+              <div className="flex-1 min-w-[140px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">岗位级别</label>
+                <input value={positionLevel} onChange={(e) => setPositionLevel(e.target.value)} placeholder="如 校招/社招 P5" className={inputCls} />
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">面试时间</label>
+                <input value={interviewDate} onChange={(e) => setInterviewDate(e.target.value)} placeholder="如 2026-03" className={inputCls} />
+              </div>
+              <div className="flex-1 min-w-[100px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">轮次</label>
+                <input value={interviewRounds} onChange={(e) => setInterviewRounds(e.target.value)} inputMode="numeric" placeholder="如 3" className={inputCls} />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex-1 min-w-[120px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">结果</label>
+                <select value={interviewResult} onChange={(e) => setInterviewResult(e.target.value as typeof interviewResult)} className={inputCls}>
+                  <option value="pass">已通过</option>
+                  <option value="fail">未通过</option>
+                  <option value="pending">流程中</option>
+                  <option value="unknown">未知</option>
+                </select>
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">城市</label>
+                <input value={interviewCity} onChange={(e) => setInterviewCity(e.target.value)} className={inputCls} />
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">投递渠道</label>
+                <input value={interviewChannel} onChange={(e) => setInterviewChannel(e.target.value)} placeholder="如 官网/内推" className={inputCls} />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="mb-2 text-sm font-medium text-slate-700">面试问答（上传时区分技术面 / HR 面、问题与答案）</p>
+              <div className="space-y-3">
+                {qaItems.map((qa, i) => (
+                  <div key={i} className="rounded-md bg-slate-50 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <select
+                        value={qa.section}
+                        onChange={(e) => updateQa(i, { section: e.target.value as "technical" | "hr" })}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                      >
+                        <option value="technical">技术面</option>
+                        <option value="hr">HR 面</option>
+                      </select>
+                      <span className="text-xs text-slate-400">第 {i + 1} 条</span>
+                      {qaItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeQa(i)}
+                          className="ml-auto text-xs text-red-500 hover:underline"
+                        >
+                          删除
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      value={qa.question}
+                      onChange={(e) => updateQa(i, { question: e.target.value })}
+                      placeholder="问题"
+                      className={`${inputCls} mb-2`}
+                    />
+                    <textarea
+                      value={qa.answer}
+                      onChange={(e) => updateQa(i, { answer: e.target.value })}
+                      placeholder="答案 / 参考回答（可选）"
+                      rows={2}
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex gap-3">
+                <button type="button" onClick={() => addQa("technical")} className="text-sm text-brand-600 hover:underline">
+                  + 技术面问答
+                </button>
+                <button type="button" onClick={() => addQa("hr")} className="text-sm text-brand-600 hover:underline">
+                  + HR 面问答
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -276,7 +398,11 @@ function SubmitInner() {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            {targetType === "sql" ? "解答 / 思路（原始内容）" : "正文（原始内容）"}
+            {targetType === "sql"
+              ? "解答 / 思路（原始内容）"
+              : targetType === "interview"
+                ? "整体感受 / 概述（原始内容）"
+                : "正文（原始内容）"}
           </label>
           <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} required className={inputCls} />
         </div>

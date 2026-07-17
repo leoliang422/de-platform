@@ -110,6 +110,15 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
             "raw_content": "问了数据倾斜和连续登录 SQL。",
             "company_name": "字节跳动",
             "position": "数据开发工程师",
+            "interview_date": "2026-03",
+            "interview_rounds": 2,
+            "interview_result": "pass",
+            "interview_city": "北京",
+            "interview_channel": "官网投递",
+            "qa_items": [
+                {"section": "technical", "question": "什么是数据倾斜？", "answer": "…"},
+                {"section": "hr", "question": "职业规划？", "answer": "…"},
+            ],
         },
     )
     assert resp.status_code == 201, resp.text
@@ -123,8 +132,23 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     resp = await client.get("/companies")
     companies = {c["name"]: c["id"] for c in resp.json()}
     assert "字节跳动" in companies
-    resp = await client.get(f"/companies/{companies['字节跳动']}/interviews")
-    assert resp.json()[0]["position"] == "数据开发工程师"
+    company_id = companies["字节跳动"]
+    resp = await client.get(f"/companies/{company_id}/interviews")
+    post = resp.json()[0]
+    assert post["position"] == "数据开发工程师"
+    assert post["result"] == "pass"
+    assert post["city"] == "北京"
+
+    # 按岗位聚合
+    groups = (await client.get(f"/companies/{company_id}/positions")).json()
+    assert groups[0]["position"] == "数据开发工程师"
+    assert groups[0]["count"] == 1
+
+    # 详情按技术面 / HR 面拆分问答
+    detail = (await client.get(f"/interviews/{post['id']}")).json()
+    assert len(detail["technical_qa"]) == 1
+    assert len(detail["hr_qa"]) == 1
+    assert detail["technical_qa"][0]["question"] == "什么是数据倾斜？"
 
     resp = await client.get("/points/me", headers=_auth(user_token))
     assert resp.json()["balance"] == 20

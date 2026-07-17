@@ -53,10 +53,23 @@ class SqlUpdate(BaseModel):
 
 
 # ---- interview ----
+class InterviewQAInput(BaseModel):
+    section: str = "technical"  # technical | hr
+    question: str = ""
+    answer: str = ""
+
+
 class InterviewCreate(BaseModel):
     company_name: str
     position: str
-    content_md: str
+    content_md: str = ""
+    position_level: str | None = None
+    interview_date: str | None = None
+    rounds: int | None = None
+    result: str | None = None
+    city: str | None = None
+    channel: str | None = None
+    qa_items: list[InterviewQAInput] = []
     status: str = "published"
 
 
@@ -64,6 +77,13 @@ class InterviewUpdate(BaseModel):
     company_name: str | None = None
     position: str | None = None
     content_md: str | None = None
+    position_level: str | None = None
+    interview_date: str | None = None
+    rounds: int | None = None
+    result: str | None = None
+    city: str | None = None
+    channel: str | None = None
+    qa_items: list[InterviewQAInput] | None = None
     status: str | None = None
 
 
