@@ -97,7 +97,7 @@ function FileImportField({ onInsert }: { onInsert: (text: string) => void }) {
           />
         </label>
         <span className="text-xs text-slate-500">
-          支持 Word / PDF / 图片 / 文本；内容将插入下方正文（Word/PDF 大模型解析暂为占位）
+          支持 Word / PDF / 图片 / 文本；内容将插入下方正文（扫描件/旧版 .doc 无法抽取文字）
         </span>
       </div>
       {note && <p className="mt-2 text-xs text-green-600">{note}</p>}
