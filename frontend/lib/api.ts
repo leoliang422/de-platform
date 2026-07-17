@@ -279,14 +279,47 @@ export interface InterviewListItem {
   id: number;
   company_id: number;
   position: string;
+  position_level: string | null;
+  interview_date: string | null;
+  rounds: number | null;
+  result: string | null;
+  city: string | null;
+  channel: string | null;
+}
+
+export interface InterviewQA {
+  id: number;
+  section: string;
+  order_index: number;
+  question: string;
+  answer: string;
 }
 
 export interface InterviewDetail extends InterviewListItem {
   content_md: string;
+  technical_qa: InterviewQA[];
+  hr_qa: InterviewQA[];
 }
+
+export interface PositionGroup {
+  position: string;
+  count: number;
+  posts: InterviewListItem[];
+}
+
+export const INTERVIEW_RESULT_LABEL: Record<string, string> = {
+  pass: "已通过",
+  fail: "未通过",
+  pending: "流程中",
+  unknown: "未知",
+};
 
 export function getCompanies(): Promise<Company[]> {
   return request<Company[]>("/companies");
+}
+
+export function getCompanyPositions(companyId: number): Promise<PositionGroup[]> {
+  return request<PositionGroup[]>(`/companies/${companyId}/positions`);
 }
 
 export function getCompanyInterviews(companyId: number): Promise<InterviewListItem[]> {
@@ -332,6 +365,12 @@ export function getProjectDetail(id: number, token?: string | null): Promise<Pro
 // ---- Submissions ----
 export type TargetType = "knowledge" | "sql" | "interview" | "project";
 
+export interface InterviewQAInput {
+  section: "technical" | "hr";
+  question: string;
+  answer: string;
+}
+
 export interface SubmissionCreateInput {
   target_type: TargetType;
   title: string;
@@ -345,6 +384,13 @@ export interface SubmissionCreateInput {
   tags?: string | null;
   company_name?: string | null;
   position?: string | null;
+  position_level?: string | null;
+  interview_date?: string | null;
+  interview_rounds?: number | null;
+  interview_result?: "pass" | "fail" | "pending" | "unknown" | null;
+  interview_city?: string | null;
+  interview_channel?: string | null;
+  qa_items?: InterviewQAInput[] | null;
   level?: string | null;
   access_type?: "free" | "paid" | null;
   implementation_md?: string | null;

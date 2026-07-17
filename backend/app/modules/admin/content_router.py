@@ -183,7 +183,21 @@ async def get_interview_detail(post_id: int, db: AsyncSession = Depends(get_db))
         "company_name": company.name if company else "",
         "position": post.position,
         "content_md": post.content_md,
+        "position_level": post.position_level,
+        "interview_date": post.interview_date,
+        "rounds": post.rounds,
+        "result": post.result,
+        "city": post.city,
+        "channel": post.channel,
         "status": post.status,
+        "qa_items": [
+            {
+                "section": q.section,
+                "question": q.question,
+                "answer": q.answer,
+            }
+            for q in post.qa
+        ],
     }
 
 
@@ -196,9 +210,16 @@ async def create_interview(
         company_name=data.company_name,
         position=data.position,
         content_md=data.content_md,
+        qa_items=[q.model_dump() for q in data.qa_items],
+        position_level=data.position_level,
+        interview_date=data.interview_date,
+        rounds=data.rounds,
+        result=data.result,
+        city=data.city,
+        channel=data.channel,
         author_id=None,
+        status_value=data.status,
     )
-    post.status = data.status
     await db.commit()
     await db.refresh(post)
     return ContentSummary(
@@ -210,7 +231,11 @@ async def create_interview(
 async def update_interview(
     post_id: int, data: InterviewUpdate, db: AsyncSession = Depends(get_db)
 ) -> ContentSummary:
-    post = await interview_service.update(db, post_id, data.model_dump(exclude_unset=True))
+    fields = data.model_dump(exclude_unset=True)
+    # qa_items 若提供则整体替换（转成 service 需要的 dict 列表）
+    if "qa_items" in fields and fields["qa_items"] is not None:
+        fields["qa_items"] = [dict(q) for q in fields["qa_items"]]
+    post = await interview_service.update(db, post_id, fields)
     companies = {c.id: c.name for c in await InterviewRepository(db).list_companies()}
     return ContentSummary(
         id=post.id, title=post.position, subtitle=companies.get(post.company_id), status=post.status

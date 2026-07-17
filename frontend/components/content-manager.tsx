@@ -60,8 +60,28 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
   ],
   interview: [
     { name: "company_name", label: "企业名称", type: "text", required: true },
-    { name: "position", label: "岗位", type: "text", required: true },
-    { name: "content_md", label: "面经正文（Markdown）", type: "textarea", required: true },
+    { name: "position", label: "岗位（相同岗位自动合并）", type: "text", required: true },
+    { name: "position_level", label: "岗位级别（可选）", type: "text", nullable: true },
+    { name: "interview_date", label: "面试时间（如 2026-03，可选）", type: "text", nullable: true },
+    { name: "rounds", label: "轮次（可选）", type: "number" },
+    {
+      name: "result",
+      label: "结果",
+      type: "select",
+      options: [
+        { value: "unknown", label: "未知" },
+        { value: "pass", label: "已通过" },
+        { value: "fail", label: "未通过" },
+        { value: "pending", label: "流程中" },
+      ],
+    },
+    { name: "city", label: "城市（可选）", type: "text", nullable: true },
+    { name: "channel", label: "投递渠道（可选）", type: "text", nullable: true },
+    {
+      name: "content_md",
+      label: "整体感受 / 概述（Markdown，可选；结构化问答请用投稿入口）",
+      type: "textarea",
+    },
   ],
   project: [
     { name: "title", label: "项目标题", type: "text", required: true },

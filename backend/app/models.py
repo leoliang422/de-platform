@@ -6,7 +6,11 @@ Used by Alembic (autogenerate / target metadata) and by tests (create_all).
 
 from app.modules.auth.models import PasswordResetToken  # noqa: F401
 from app.modules.catalog.models import Category  # noqa: F401
-from app.modules.interview.models import Company, InterviewPost  # noqa: F401
+from app.modules.interview.models import (  # noqa: F401
+    Company,
+    InterviewPost,
+    InterviewQA,
+)
 from app.modules.knowledge.models import KnowledgeItem  # noqa: F401
 from app.modules.notifications.models import Notification  # noqa: F401
 from app.modules.payment.models import Entitlement, Order  # noqa: F401
