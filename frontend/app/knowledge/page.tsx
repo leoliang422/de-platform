@@ -170,19 +170,30 @@ function CategoryTree({
     <>
       {nodes.map((n) => (
         <div key={n.id}>
-          <button
-            onClick={() => onSelect(n.id)}
-            style={{ paddingLeft: `${8 + depth * 12}px` }}
-            className={`block w-full rounded px-2 py-1.5 text-left ${
-              selected === n.id
-                ? "bg-brand-50 font-medium text-brand-700"
-                : depth === 0
-                  ? "font-medium text-slate-700 hover:bg-slate-100"
-                  : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {n.name}
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={() => onSelect(n.id)}
+              style={{ paddingLeft: `${8 + depth * 12}px` }}
+              className={`block flex-1 rounded px-2 py-1.5 text-left ${
+                selected === n.id
+                  ? "bg-brand-50 font-medium text-brand-700"
+                  : depth === 0
+                    ? "font-medium text-slate-700 hover:bg-slate-100"
+                    : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {n.name}
+            </button>
+            {depth === 0 && (
+              <Link
+                href={`/knowledge/tree/${n.id}`}
+                title="查看该分类知识树"
+                className="shrink-0 rounded px-1.5 py-1 text-sm text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+              >
+                🌳
+              </Link>
+            )}
+          </div>
           {n.children.length > 0 && (
             <CategoryTree
               nodes={n.children}

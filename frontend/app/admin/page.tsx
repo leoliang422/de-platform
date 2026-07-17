@@ -7,14 +7,18 @@ import { PageHeader, Prose } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
 import {
   adminApprove,
+  adminApproveNode,
   adminCreateCategory,
   adminDeleteCategory,
   adminListCategories,
+  adminListPendingNodes,
   adminListSubmissions,
   adminReject,
+  adminRejectNode,
   getAccessToken,
   type AdminSubmission,
   type CategoryFlat,
+  type PendingNode,
   type TargetType,
 } from "@/lib/api";
 
@@ -110,9 +114,77 @@ function AdminInner() {
         </div>
       )}
 
+      <KnowledgeTreeReview />
+
       <ContentManager />
 
       <CategoryManager />
+    </div>
+  );
+}
+
+function KnowledgeTreeReview() {
+  const [pending, setPending] = useState<PendingNode[]>([]);
+
+  const load = useCallback(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    adminListPendingNodes(token)
+      .then(setPending)
+      .catch(() => setPending([]));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function approve(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    await adminApproveNode(token, id);
+    load();
+  }
+
+  async function reject(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    await adminRejectNode(token, id);
+    load();
+  }
+
+  return (
+    <div className="mt-10">
+      <h2 className="mb-3 text-lg font-semibold text-slate-900">
+        知识树待审 {pending.length > 0 && `(${pending.length})`}
+      </h2>
+      {pending.length === 0 ? (
+        <p className="text-sm text-slate-400">当前没有待审核的知识树节点。</p>
+      ) : (
+        <div className="space-y-2">
+          {pending.map((n) => (
+            <div
+              key={n.id}
+              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <span className="truncate text-slate-800">
+                {n.parent_title ? `${n.parent_title} → ` : "（顶层）"}
+                <span className="font-medium">{n.title}</span>
+                <span className="ml-2 text-xs text-slate-400">
+                  分类 #{n.category_id} · 用户 #{n.proposer_id ?? "-"}
+                </span>
+              </span>
+              <span className="flex shrink-0 gap-3">
+                <button onClick={() => approve(n.id)} className="text-xs text-green-600 hover:underline">
+                  通过
+                </button>
+                <button onClick={() => reject(n.id)} className="text-xs text-red-500 hover:underline">
+                  驳回
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
