@@ -52,6 +52,29 @@ function MeInner() {
     <div>
       <PageHeader title="个人中心" desc={user ? `${user.nickname} · ${user.email}` : undefined} />
 
+      <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={
+            user?.avatar_url ||
+            "https://api.dicebear.com/7.x/initials/svg?seed=" + (user?.nickname || "U")
+          }
+          alt="头像"
+          className="h-16 w-16 rounded-full border border-slate-200 object-cover"
+        />
+        <div className="flex-1">
+          <div className="text-base font-semibold text-slate-900">{user?.nickname}</div>
+          {user?.job_title && <div className="text-sm text-slate-500">{user.job_title}</div>}
+          {user?.bio && <div className="mt-1 text-sm text-slate-600">{user.bio}</div>}
+        </div>
+        <Link
+          href="/me/settings"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          账号设置
+        </Link>
+      </div>
+
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
         <div className="text-sm text-slate-500">积分余额</div>
         <div className="mt-1 text-3xl font-bold text-brand-600">
