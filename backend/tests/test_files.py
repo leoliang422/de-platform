@@ -77,3 +77,69 @@ def test_storage_factory_falls_back_to_local(monkeypatch: pytest.MonkeyPatch) ->
         assert get_storage().name == "local"  # 凭证未配齐回退 local
     finally:
         get_settings.cache_clear()
+
+
+async def test_extract_text_file(client: AsyncClient) -> None:
+    token = await _token(client, "ex1@test.io")
+    resp = await client.post(
+        "/files/extract",
+        headers=_auth(token),
+        files={"file": ("note.md", b"# hi\ncontent", "text/markdown")},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["kind"] == "text"
+    assert body["placeholder"] is False
+    assert "content" in body["text"]
+
+
+async def test_extract_image_returns_markdown(
+    client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STORAGE_LOCAL_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        token = await _token(client, "ex2@test.io")
+        resp = await client.post(
+            "/files/extract",
+            headers=_auth(token),
+            files={"file": ("p.png", _PNG, "image/png")},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["kind"] == "image"
+        assert body["text"].startswith("![") and "/uploads/" in body["text"]
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_extract_document_is_placeholder(
+    client: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STORAGE_LOCAL_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        token = await _token(client, "ex3@test.io")
+        docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        resp = await client.post(
+            "/files/extract",
+            headers=_auth(token),
+            files={"file": ("r.docx", b"PK\x03\x04fake", docx)},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["kind"] == "document"
+        assert body["placeholder"] is True  # 占位：解析未接入
+        assert body["url"] and "/uploads/" in body["url"]
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_extract_rejects_unknown_type(client: AsyncClient) -> None:
+    token = await _token(client, "ex4@test.io")
+    resp = await client.post(
+        "/files/extract",
+        headers=_auth(token),
+        files={"file": ("a.bin", b"\x00\x01", "application/octet-stream")},
+    )
+    assert resp.status_code == 400

@@ -278,6 +278,35 @@ export async function uploadImage(token: string, file: File): Promise<{ url: str
   return (await res.json()) as { url: string };
 }
 
+export interface ExtractResult {
+  filename: string;
+  kind: "text" | "image" | "document";
+  placeholder: boolean;
+  text: string;
+  url: string | null;
+}
+
+export async function extractFile(token: string, file: File): Promise<ExtractResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE_URL}/files/extract`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = `解析失败 (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as ExtractResult;
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("de_access_token");

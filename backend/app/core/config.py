@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # s3  ：S3 兼容对象存储（R2/TOS/MinIO）；凭证未配齐时自动回退 local。
     storage_provider: str = "local"
     storage_local_dir: str = "uploads"
+    # 投稿文件解析：mock（文本/图片可用，Word/PDF 仅占位）| llm（接入大模型/文档解析，
+    # 未接入时自动回退 mock）。见 docs/deployment.md「投稿文件解析」。
+    file_extract_provider: str = "mock"
     # 公开访问前缀（留空则用请求自身的 base_url 拼接，本地/单域名部署即可）。
     storage_public_base_url: str = ""
     # S3 兼容占位配置；获取方式见 docs/deployment.md「文件存储」。
