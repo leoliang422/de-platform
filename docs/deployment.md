@@ -64,7 +64,59 @@
 |---|---|---|
 | 真实豆包大模型 | `LLM_PROVIDER=doubao` + `DOUBAO_API_KEY=<key>` | 火山方舟 Ark，OpenAI 兼容；无 key 自动回退 mock |
 | 异步加工队列 | `TASK_QUEUE_ENABLED=true` + `REDIS_URL=<Upstash>` | 需另起 Worker：`arq app.workers.main.WorkerSettings` |
-| 真实支付 | `PAYMENT_PROVIDER=wechat/alipay/stripe` | 需实现对应 Provider + 商户资质（尚未接入） |
+| 真实支付 | `PAYMENT_PROVIDER=wechat` / `alipay` + 对应凭证 | 见下方「支付接入」；凭证未配齐时**自动回退 mock**，不影响现有功能 |
+
+## 支付接入（微信 / 支付宝）
+
+> M5 现状：代码已把**支付抽象层、异步下单、回调结算（webhook）**都搭好，微信/支付宝
+> 走「占位」模式——**默认 `PAYMENT_PROVIDER=mock`，同步结算**，与之前完全一致。当你把
+> 下面的商户凭证配齐并切换 `PAYMENT_PROVIDER` 后即可启用真实支付；**任一凭证缺失都会
+> 自动回退 mock**，所以随时可以先部署、后接入，不会影响已上线功能。
+>
+> 代码中 `create_charge` / `parse_callback` 的真实网关调用与验签处标了 `TODO(M5-real)`，
+> 拿到凭证后按注释补齐即可（微信 v3 Native 下单 / 支付宝 page.pay）。
+
+### 通用流程
+
+1. 申请商户号、拿到下方凭证，填入 Render 后端 **Environment**。
+2. 把 `PAYMENT_PROVIDER` 设为 `wechat` 或 `alipay`（一次只启用一个）。
+3. 在支付平台后台配置**异步通知地址（回调 URL）**，指向后端：
+   - 微信：`https://<你的后端域名>/payment/webhook/wechat`
+   - 支付宝：`https://<你的后端域名>/payment/webhook/alipay`
+4. 现金解锁时，后端返回 `status=pending` + `pay_url`（前端已适配跳转）；用户付款后
+   支付平台回调上述 webhook，后端幂等结算订单并发放解锁权益。
+
+### 微信支付（v3 · Native 扫码）凭证获取
+
+| 变量 | 含义 | 从哪拿 |
+|---|---|---|
+| `WECHAT_APP_ID` | 公众号/小程序/开放平台 AppID | [微信公众平台](https://mp.weixin.qq.com) / 开放平台，需与商户号绑定 |
+| `WECHAT_MCH_ID` | 商户号 | [微信支付商户平台](https://pay.weixin.qq.com) 完成商户入驻后获得 |
+| `WECHAT_API_V3_KEY` | APIv3 密钥（回调解密/验签用） | 商户平台 → 账户中心 → API 安全 → 设置 APIv3 密钥（32 位，自己设定并保存） |
+| `WECHAT_CERT_SERIAL` | 商户 API 证书序列号 | 商户平台 → API 安全 → 申请 API 证书后可见 |
+| `WECHAT_PRIVATE_KEY_PATH` | 商户 API 私钥文件路径 | 申请 API 证书时下载的 `apiclient_key.pem`；部署到服务器路径填这里 |
+| `WECHAT_NOTIFY_URL` | 异步通知地址 | 填 `https://<后端域名>/payment/webhook/wechat` |
+
+> 前置资质：需**企业主体**开通微信支付商户号（个人主体一般无法开通 Native 支付）。
+
+### 支付宝（电脑/手机网站支付）凭证获取
+
+| 变量 | 含义 | 从哪拿 |
+|---|---|---|
+| `ALIPAY_APP_ID` | 应用 AppID | [支付宝开放平台](https://open.alipay.com) → 创建「网页/移动应用」后获得 |
+| `ALIPAY_PRIVATE_KEY` | 应用私钥（RSA2） | 用支付宝「密钥生成工具」生成密钥对，私钥自留填这里 |
+| `ALIPAY_PUBLIC_KEY` | 支付宝公钥 | 上传应用公钥后，平台生成的**支付宝公钥**（验签回调用），复制填这里 |
+| `ALIPAY_GATEWAY` | 网关地址 | 生产 `https://openapi.alipay.com/gateway.do`（沙箱另有地址） |
+| `ALIPAY_NOTIFY_URL` | 异步通知地址 | 填 `https://<后端域名>/payment/webhook/alipay` |
+
+> 联调建议：先用支付宝**沙箱环境**（开放平台 → 研发服务 → 沙箱）拿沙箱 AppID/密钥/网关，
+> 验证整条 `下单 → 付款 → 回调 → 解锁` 链路无误后，再切换到生产凭证。
+
+### 安全提醒
+
+- 私钥（`apiclient_key.pem` / `ALIPAY_PRIVATE_KEY`）与 `WECHAT_API_V3_KEY` 属高敏感信息，
+  **只放 Render 环境变量，切勿提交进仓库**（`.env` 已被 gitignore）。
+- webhook 无登录鉴权，安全性由**平台验签**保证——真实接入务必在 `parse_callback` 完成验签。
 
 ## 安全清单（上线务必确认）
 

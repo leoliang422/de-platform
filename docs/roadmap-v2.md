@@ -32,11 +32,19 @@
 ### 5A 真实支付（微信 + 支付宝）
 现状：`MockProvider` 永远成功；订单 `Order` / 权益 `Entitlement` / 双标价 / 积分扣减闭环已就绪。
 
-- `P0` `PaymentProvider` 落地微信支付（Native 扫码 / JSAPI）与支付宝（当面付 / 电脑网站支付）
-- `P0` 统一下单 → 返回支付二维码/跳转链接
-- `P0` **异步回调 webhook**：验签 + 幂等 + 订单状态机（pending/paid/failed/refunded/closed）
-- `P0` 前端收银台 + 支付结果轮询/回跳页
-- `P1` 退款、对账流水、订单超时关闭
+**本轮（占位式）已完成：**
+- [x] 抽象层升级：`ChargeResult`（同步结算 / 异步 pay_url·qr）+ `CallbackResult` + `get_payment_provider()` 按 env 分派并**安全回退 mock**
+- [x] 微信（v3 Native）/ 支付宝（page.pay）Provider 骨架 + 占位配置（`create_charge`/`parse_callback` 标 `TODO(M5-real)`）
+- [x] 现金解锁分同步（mock 立即发权益）/ 异步（挂起订单返回 `pay_url`）两条路径
+- [x] **异步回调 webhook** `POST /payment/webhook/{provider}`：幂等结算订单 + 发放权益
+- [x] 前端 `UnlockPanel` 适配 `pending` 态（引导跳转支付页）
+- [x] `docs/deployment.md` 补微信/支付宝凭证获取方式 + 回调地址；`.env.example` 占位变量
+- [x] 测试：现有支付用例全绿 + 工厂回退 + webhook 结算/幂等/失败/未知通道
+
+**待真实凭证到位后补齐（TODO(M5-real)）：**
+- `P0` 补微信 v3 Native 真实下单 + APIv3 验签解密；支付宝 page.pay 签名 + 公钥验签
+- `P0` 前端收银台二维码展示 + 支付结果轮询/回跳页
+- `P1` 退款、对账流水、订单超时关闭；订单状态机扩展（refunded/closed）
 - 完成标准：沙箱支付成功 → 回调 → 订单 `paid` → `entitlement` 自动发放；重复回调不重复发放。
 
 ### 5B 异步队列

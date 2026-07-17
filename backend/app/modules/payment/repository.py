@@ -21,6 +21,9 @@ class PaymentRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_order(self, order_id: int) -> Order | None:
+        return await self.db.get(Order, order_id)
+
     async def list_entitlements(self, user_id: int) -> list[Entitlement]:
         stmt = (
             select(Entitlement)

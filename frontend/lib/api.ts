@@ -359,9 +359,15 @@ export interface Entitlement {
 }
 
 export interface UnlockResult {
-  entitlement: Entitlement;
+  // 同步结算（积分 / mock 现金）返回 entitlement；异步支付（微信/支付宝）
+  // 返回 status="pending" + pay_url/qr_code，entitlement 为 null。
+  status: "paid" | "pending" | "already";
+  entitlement: Entitlement | null;
   balance: number;
   already_unlocked: boolean;
+  order_id?: number | null;
+  pay_url?: string | null;
+  qr_code?: string | null;
 }
 
 export function unlockContent(
