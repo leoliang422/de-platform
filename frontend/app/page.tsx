@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { HomeAuthCtas } from "@/components/home-auth-ctas";
+
 const sections = [
   {
     title: "八股总结",
@@ -37,20 +39,7 @@ export default function HomePage() {
         <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
           一站式获取八股知识、SQL 练习、企业面经与实战项目。贡献内容赚取积分，解锁付费资源。
         </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Link
-            href="/register"
-            className="rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-700"
-          >
-            免费注册
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-lg border border-slate-300 px-5 py-2.5 font-medium text-slate-700 hover:bg-slate-100"
-          >
-            登录
-          </Link>
-        </div>
+        <HomeAuthCtas />
       </section>
 
       <section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
