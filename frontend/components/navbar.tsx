@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { getAccessToken, getUnreadCount } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+const MODULES: { href: string; label: string }[] = [
+  { href: "/knowledge", label: "八股" },
+  { href: "/sql", label: "SQL 题库" },
+  { href: "/interview", label: "面经" },
+  { href: "/projects", label: "项目" },
+];
+
 export function Navbar() {
   const { user, loading, logout } = useAuth();
+  const pathname = usePathname();
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -30,9 +39,29 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-semibold text-slate-900">
-          DE<span className="text-brand-600">Platform</span>
-        </Link>
+        <div className="flex items-center gap-2 sm:gap-5">
+          <Link href="/" className="text-lg font-semibold text-slate-900">
+            DE<span className="text-brand-600">Platform</span>
+          </Link>
+          <nav className="flex items-center gap-1 text-sm">
+            {MODULES.map((m) => {
+              const active = pathname === m.href || pathname.startsWith(`${m.href}/`);
+              return (
+                <Link
+                  key={m.href}
+                  href={m.href}
+                  className={`rounded-md px-2.5 py-1.5 transition sm:px-3 ${
+                    active
+                      ? "bg-brand-50 font-medium text-brand-700"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {m.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
         <nav className="flex items-center gap-3 text-sm">
           {loading ? (
             <span className="text-slate-400">…</span>
