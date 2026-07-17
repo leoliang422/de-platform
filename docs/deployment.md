@@ -66,6 +66,28 @@
 | 异步加工队列 | `TASK_QUEUE_ENABLED=true` + `REDIS_URL=<Upstash>` | 需另起 Worker：`arq app.workers.main.WorkerSettings` |
 | 真实支付 | `PAYMENT_PROVIDER=wechat` / `alipay` + 对应凭证 | 见下方「支付接入」；凭证未配齐时**自动回退 mock**，不影响现有功能 |
 
+## 异步加工队列（M5-5B · Upstash Redis + Worker）
+
+> 现状：投稿加工默认 **`TASK_QUEUE_ENABLED=false`（同步加工，无需 Redis）**，与之前一致。
+> 代码已把「入队 → Worker 加工 → 落 `pending_review` / 失败落 `failed`」链路搭好，并做了
+> **入队失败自动回退同步加工**，所以开启前后都不会让投稿卡死。
+
+开启异步（可选，用于大模型加工较慢/量大时）：
+
+1. **建 Redis**：打开 https://upstash.com → 建 Redis 数据库（选与 Render 就近区域），
+   复制 **`rediss://...`** 连接串（TLS）。
+2. **Render web 服务**：Environment 里设 `REDIS_URL=<上面的 rediss://...>`、`TASK_QUEUE_ENABLED=true`。
+3. **启用 Worker 服务**：把 `render.yaml` 里被注释的 `de-platform-worker` 块取消注释，
+   在 Render **Blueprint → Sync** 重新同步；给 worker 填 `DATABASE_URL`（同 Neon）与
+   `REDIS_URL`（同上）。Worker 启动命令为 `arq app.workers.main.WorkerSettings`。
+   - Worker 需常驻，建议 web + worker 都用 **Starter 档**（免费实例会休眠，不适合跑 worker）。
+4. **验证**：投稿后接口立即返回 `status="processing"`；Worker 加工完成后变 `pending_review`。
+   前端「我的投稿」轮询即可看到状态流转；失败会显示 `failed` 且可点重试
+   （`POST /submissions/{id}/retry`，作者本人或管理员）。
+
+> 本地联调：`export TASK_QUEUE_ENABLED=true REDIS_URL=redis://localhost:6379/0`，
+> 另开一终端在 `backend/` 跑 `arq app.workers.main.WorkerSettings`。不设时保持同步加工。
+
 ## 支付接入（微信 / 支付宝）
 
 > M5 现状：代码已把**支付抽象层、异步下单、回调结算（webhook）**都搭好，微信/支付宝

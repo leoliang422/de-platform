@@ -34,5 +34,39 @@ services:
         value: mock
       - key: PAYMENT_PROVIDER
         value: mock
+      # 投稿加工队列：默认关闭（同步加工，无需 Redis）。
+      # 开启异步：置为 "true"，填下方 REDIS_URL，并启用下面的 worker 服务。
       - key: TASK_QUEUE_ENABLED
         value: "false"
+      # Upstash Redis 连接串（rediss://...）；开启队列时必填，否则留空即可。
+      - key: REDIS_URL
+        sync: false
+
+  # ────────────────────────────────────────────────────────────────
+  # 异步加工 Worker（M5-5B）。默认注释：开启队列时取消注释再 Sync 蓝图。
+  # 前置：Upstash 建 Redis 拿到 rediss:// 连接串；web 与 worker 的
+  # REDIS_URL 填同一个；两边 TASK_QUEUE_ENABLED=true。Worker 需常驻，
+  # 建议随 web 一起升 Starter（免费实例会休眠，不适合跑 worker）。
+  # ────────────────────────────────────────────────────────────────
+  # - type: worker
+  #   name: de-platform-worker
+  #   runtime: python
+  #   region: singapore
+  #   plan: starter
+  #   rootDir: backend
+  #   buildCommand: pip install -e .
+  #   startCommand: arq app.workers.main.WorkerSettings
+  #   autoDeploy: true
+  #   envVars:
+  #     - key: PYTHON_VERSION
+  #       value: "3.12.8"
+  #     - key: APP_ENV
+  #       value: production
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: REDIS_URL
+  #       sync: false
+  #     - key: LLM_PROVIDER
+  #       value: mock
+  #     - key: TASK_QUEUE_ENABLED
+  #       value: "true"

@@ -270,6 +270,10 @@ export function getMySubmissions(token: string): Promise<Submission[]> {
   return authRequest<Submission[]>("/submissions/me", token);
 }
 
+export function retrySubmission(token: string, id: number): Promise<Submission> {
+  return authRequest<Submission>(`/submissions/${id}/retry`, token, { method: "POST" });
+}
+
 // ---- Points ----
 export interface LedgerEntry {
   id: number;
