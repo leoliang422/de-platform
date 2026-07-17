@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
+import { ContentInteractions } from "@/components/interactions";
 import { UnlockPanel } from "@/components/unlock";
 import { getAccessToken, getProjectDetail, type ProjectDetail } from "@/lib/api";
 
@@ -82,6 +83,7 @@ export default function ProjectDetailPage({
               )}
             </>
           )}
+          <ContentInteractions contentType="project" contentId={item.id} />
         </>
       )}
     </div>

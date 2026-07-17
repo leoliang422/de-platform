@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 
 import { BackLink, Empty, ErrorText, Loading, Prose } from "@/components/content";
+import { ContentInteractions } from "@/components/interactions";
 import {
   getCompanyPositions,
   getInterviewDetail,
@@ -125,6 +126,7 @@ function InterviewCard({ post }: { post: InterviewListItem }) {
               )}
               <QASection title="技术面" items={detail.technical_qa} />
               <QASection title="HR 面" items={detail.hr_qa} />
+              <ContentInteractions contentType="interview" contentId={detail.id} />
             </div>
           ) : (
             <Loading />

@@ -10,6 +10,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.files.router import router as files_router
+from app.modules.interactions.router import router as interactions_router
 from app.modules.interview.router import router as interview_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.notifications.router import router as notifications_router
@@ -55,6 +56,7 @@ app.include_router(projects_router)
 app.include_router(points_router)
 app.include_router(submissions_router)
 app.include_router(notifications_router)
+app.include_router(interactions_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(admin_content_router)
