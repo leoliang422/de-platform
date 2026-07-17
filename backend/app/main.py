@@ -12,6 +12,7 @@ from app.modules.catalog.router import router as catalog_router
 from app.modules.files.router import router as files_router
 from app.modules.interview.router import router as interview_router
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.payment.router import router as payment_router
 from app.modules.points.router import router as points_router
 from app.modules.projects.router import router as projects_router
@@ -53,6 +54,7 @@ app.include_router(interview_router)
 app.include_router(projects_router)
 app.include_router(points_router)
 app.include_router(submissions_router)
+app.include_router(notifications_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(admin_content_router)

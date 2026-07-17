@@ -12,6 +12,7 @@ from app.modules.interview import service as interview_service
 from app.modules.knowledge import service as knowledge_service
 from app.modules.llm.base import LLMClient
 from app.modules.llm.factory import get_llm_client
+from app.modules.notifications.service import NotificationService
 from app.modules.points.service import POINTS_BY_TYPE, PointsService
 from app.modules.projects import service as project_service
 from app.modules.sql_bank import service as sql_service
@@ -162,6 +163,13 @@ class SubmissionService:
             ref_type="submission",
             ref_id=submission.id,
         )
+        await NotificationService(self.db).notify(
+            user_id=submission.user_id,
+            type="submission_approved",
+            title="投稿已发布",
+            body=f"你的投稿《{submission.title}》已通过审核并发布。",
+            link="/submit",
+        )
         await self.db.commit()
         await self.db.refresh(submission)
         return submission
@@ -177,6 +185,13 @@ class SubmissionService:
             )
         submission.status = "rejected"
         submission.reject_reason = reason
+        await NotificationService(self.db).notify(
+            user_id=submission.user_id,
+            type="submission_rejected",
+            title="投稿被驳回",
+            body=f"你的投稿《{submission.title}》未通过审核：{reason}",
+            link="/submit",
+        )
         await self.db.commit()
         await self.db.refresh(submission)
         return submission
