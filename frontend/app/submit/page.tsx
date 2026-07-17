@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import {
   ApiError,
   createSubmission,
+  extractFile,
   getAccessToken,
   getMySubmissions,
   retrySubmission,
@@ -47,6 +48,61 @@ export default function SubmitPage() {
     <RequireAuth>
       <SubmitInner />
     </RequireAuth>
+  );
+}
+
+// 本地文件导入：Word/PDF/图片/文本 → 大模型解析（占位）→ 插入正文
+function FileImportField({ onInsert }: { onInsert: (text: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 允许重复选择同一文件
+    if (!file) return;
+    const token = getAccessToken();
+    if (!token) return;
+    setBusy(true);
+    setErr(null);
+    setNote(null);
+    try {
+      const r = await extractFile(token, file);
+      onInsert(r.text);
+      setNote(
+        r.kind === "image"
+          ? `已插入图片：${r.filename}`
+          : r.placeholder
+            ? `已上传「${r.filename}」，文档解析 / 大模型识别尚未接入（占位）——已插入下载链接与提示，请手动补充正文。`
+            : `已从「${r.filename}」导入内容。`,
+      );
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : "解析失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="cursor-pointer rounded-lg bg-white px-3 py-1.5 text-sm text-brand-600 ring-1 ring-slate-300 hover:bg-brand-50">
+          {busy ? "解析中…" : "从文件导入"}
+          <input
+            type="file"
+            accept=".txt,.md,.csv,.json,.doc,.docx,.pdf,image/*"
+            onChange={onChange}
+            disabled={busy}
+            className="hidden"
+          />
+        </label>
+        <span className="text-xs text-slate-500">
+          支持 Word / PDF / 图片 / 文本；内容将插入下方正文（Word/PDF 大模型解析暂为占位）
+        </span>
+      </div>
+      {note && <p className="mt-2 text-xs text-green-600">{note}</p>}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
   );
 }
 
@@ -374,6 +430,7 @@ function SubmitInner() {
             <label className="mb-1 block text-sm font-medium text-slate-700">
               {targetType === "sql" ? "解答 / 思路（原始内容）" : "正文（原始内容）"}
             </label>
+            <FileImportField onInsert={(t) => setRaw((p) => (p ? `${p}\n\n${t}` : t))} />
             <textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} required className={inputCls} />
           </div>
         )}
