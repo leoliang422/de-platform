@@ -7,16 +7,47 @@ import { RequireAuth } from "@/components/guard";
 import { useAuth } from "@/lib/auth";
 import {
   ApiError,
+  completeAnswer,
   createSubmission,
   extractFile,
   getAccessToken,
   getMySubmissions,
+  parseSubmission,
   retrySubmission,
   type InterviewQAInput,
   type Submission,
   type SubmissionCreateInput,
   type TargetType,
 } from "@/lib/api";
+
+// 批量解析后的可编辑草稿（字段按模块使用其中一部分）
+interface Draft {
+  title: string;
+  content_md: string;
+  prompt_md: string;
+  answer_md: string;
+  difficulty: string;
+  description_md: string;
+  implementation_md: string;
+  completing: boolean;
+}
+
+function emptyDraft(): Draft {
+  return {
+    title: "",
+    content_md: "",
+    prompt_md: "",
+    answer_md: "",
+    difficulty: "medium",
+    description_md: "",
+    implementation_md: "",
+    completing: false,
+  };
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
 
 const TYPE_LABELS: Record<TargetType, string> = {
   knowledge: "八股知识",
@@ -134,6 +165,14 @@ function SubmitInner() {
 
   const [retryingId, setRetryingId] = useState<number | null>(null);
 
+  // 批量解析
+  const [parseText, setParseText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseMsg, setParseMsg] = useState<string | null>(null);
+  const [parseErr, setParseErr] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+
   const loadMine = useCallback(() => {
     const token = getAccessToken();
     if (!token) return;
@@ -177,6 +216,153 @@ function SubmitInner() {
 
   function removeQa(index: number) {
     setQaItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleParse(file: File | null) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!file && !parseText.trim()) {
+      setParseErr("请上传文件或粘贴文本");
+      return;
+    }
+    setParsing(true);
+    setParseErr(null);
+    setParseMsg(null);
+    try {
+      const res = await parseSubmission(token, {
+        targetType,
+        text: parseText.trim() || undefined,
+        file,
+      });
+      const items = res.items ?? [];
+      if (targetType === "interview") {
+        // 面经：一场面试，填入现有表单
+        const post = items[0] ?? {};
+        if (str(post.company_name)) setCompanyName(str(post.company_name));
+        const t = str(post.interview_type);
+        if (["social", "campus", "daily", "summer"].includes(t)) {
+          setInterviewType(t as typeof interviewType);
+        }
+        const qa = Array.isArray(post.qa_items) ? (post.qa_items as Record<string, unknown>[]) : [];
+        if (qa.length > 0) {
+          setQaItems(
+            qa.map((q) => ({
+              section: (["round1", "round2", "round3", "hr"].includes(str(q.section))
+                ? str(q.section)
+                : "round1") as InterviewQAInput["section"],
+              question: str(q.question),
+              answer: str(q.answer),
+            })),
+          );
+        }
+        setParseMsg(`已解析出 ${qa.length} 条问答并填入下方表单，请检查后提交。`);
+      } else {
+        const ds: Draft[] = items.map((it) => ({
+          ...emptyDraft(),
+          title: str(it.title),
+          content_md: str(it.content_md),
+          prompt_md: str(it.prompt_md),
+          answer_md: str(it.answer_md),
+          difficulty: str(it.difficulty) || "medium",
+          description_md: str(it.description_md),
+          implementation_md: str(it.implementation_md),
+        }));
+        setDrafts(ds);
+        setParseMsg(`已解析出 ${ds.length} 条，请在下方检查/补全后批量提交。`);
+      }
+    } catch (e) {
+      setParseErr(e instanceof ApiError ? e.message : "解析失败");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function updateDraft(i: number, patch: Partial<Draft>) {
+    setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  }
+
+  function removeDraft(i: number) {
+    setDrafts((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function completeDraftAnswer(i: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    const d = drafts[i];
+    const question = targetType === "sql" ? d.prompt_md : d.content_md;
+    if (!question.trim()) {
+      setParseErr("请先填写题目/问题再生成答案");
+      return;
+    }
+    updateDraft(i, { completing: true });
+    try {
+      const { answer } = await completeAnswer(token, {
+        target_type: targetType,
+        question,
+        context: d.title,
+      });
+      if (targetType === "sql") updateDraft(i, { answer_md: answer });
+      else updateDraft(i, { content_md: `${d.content_md}\n\n${answer}`.trim() });
+    } catch (e) {
+      setParseErr(e instanceof ApiError ? e.message : "生成失败");
+    } finally {
+      updateDraft(i, { completing: false });
+    }
+  }
+
+  async function completeQaAnswer(i: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    const qa = qaItems[i];
+    if (!qa.question.trim()) {
+      setParseErr("请先填写问题再生成答案");
+      return;
+    }
+    try {
+      const { answer } = await completeAnswer(token, {
+        target_type: "interview",
+        question: qa.question,
+      });
+      updateQa(i, { answer });
+    } catch (e) {
+      setParseErr(e instanceof ApiError ? e.message : "生成失败");
+    }
+  }
+
+  async function handleBatchSubmit() {
+    const token = getAccessToken();
+    if (!token || drafts.length === 0) return;
+    setBatchSubmitting(true);
+    setParseErr(null);
+    setParseMsg(null);
+    let ok = 0;
+    let fail = 0;
+    for (const d of drafts) {
+      const payload: SubmissionCreateInput = {
+        target_type: targetType,
+        title: d.title || "未命名",
+        raw_content:
+          targetType === "sql"
+            ? d.answer_md.trim() || "（待补充）"
+            : targetType === "project"
+              ? d.description_md
+              : d.content_md,
+        prompt_md: targetType === "sql" ? d.prompt_md : undefined,
+        difficulty: targetType === "sql" ? d.difficulty : undefined,
+        implementation_md: targetType === "project" ? d.implementation_md : undefined,
+      };
+      try {
+        await createSubmission(token, payload);
+        ok += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    setBatchSubmitting(false);
+    setDrafts([]);
+    setParseMsg(`批量提交完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ""}。`);
+    loadMine();
+    await refreshUser();
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -254,6 +440,151 @@ function SubmitInner() {
             ))}
           </select>
         </div>
+
+        <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-4">
+          <p className="text-sm font-semibold text-slate-800">
+            AI 批量解析（上传文件 / 粘贴文本，自动拆分为多条）
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            支持 Word / PDF / 文本。
+            {targetType === "interview"
+              ? "面经将解析为一场面试的多条问答，填入下方表单。"
+              : "解析为多条草稿，可逐条检查 / 补全后一次性提交。"}
+            （图片解析后续支持）
+          </p>
+          <textarea
+            value={parseText}
+            onChange={(e) => setParseText(e.target.value)}
+            placeholder="可直接粘贴原始文本（如整篇八股/多道题/一份面经）…"
+            rows={3}
+            className={`${inputCls} mt-3`}
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <label className="cursor-pointer rounded-lg bg-white px-3 py-1.5 text-sm text-brand-600 ring-1 ring-slate-300 hover:bg-brand-50">
+              选择文件解析
+              <input
+                type="file"
+                accept=".txt,.md,.csv,.json,.doc,.docx,.pdf"
+                className="hidden"
+                disabled={parsing}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  handleParse(f);
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => handleParse(null)}
+              disabled={parsing}
+              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {parsing ? "解析中…" : "解析文本"}
+            </button>
+          </div>
+          {parseMsg && <p className="mt-2 text-xs text-green-600">{parseMsg}</p>}
+          {parseErr && <p className="mt-2 text-xs text-red-600">{parseErr}</p>}
+        </div>
+
+        {targetType !== "interview" && drafts.length > 0 && (
+          <div className="space-y-3 rounded-lg border border-slate-300 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-800">解析结果（{drafts.length} 条）</p>
+              <button
+                type="button"
+                onClick={handleBatchSubmit}
+                disabled={batchSubmitting}
+                className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {batchSubmitting ? "提交中…" : `批量提交 ${drafts.length} 条`}
+              </button>
+            </div>
+            {drafts.map((d, i) => (
+              <div key={i} className="space-y-2 rounded-md bg-slate-50 p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={d.title}
+                    onChange={(e) => updateDraft(i, { title: e.target.value })}
+                    placeholder="标题"
+                    className={`${inputCls} flex-1`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeDraft(i)}
+                    className="shrink-0 text-xs text-red-500 hover:underline"
+                  >
+                    删除
+                  </button>
+                </div>
+                {targetType === "knowledge" && (
+                  <textarea
+                    value={d.content_md}
+                    onChange={(e) => updateDraft(i, { content_md: e.target.value })}
+                    placeholder="正文（Markdown）"
+                    rows={4}
+                    className={inputCls}
+                  />
+                )}
+                {targetType === "sql" && (
+                  <>
+                    <textarea
+                      value={d.prompt_md}
+                      onChange={(e) => updateDraft(i, { prompt_md: e.target.value })}
+                      placeholder="题干"
+                      rows={2}
+                      className={inputCls}
+                    />
+                    <div className="flex items-start gap-2">
+                      <textarea
+                        value={d.answer_md}
+                        onChange={(e) => updateDraft(i, { answer_md: e.target.value })}
+                        placeholder="参考答案（可点右侧 AI 生成，人工确认后提交）"
+                        rows={2}
+                        className={`${inputCls} flex-1`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => completeDraftAnswer(i)}
+                        disabled={d.completing}
+                        className="shrink-0 rounded-lg border border-brand-500 px-2 py-1.5 text-xs text-brand-600 hover:bg-brand-50 disabled:opacity-50"
+                      >
+                        {d.completing ? "生成中…" : "AI 生成答案"}
+                      </button>
+                    </div>
+                    <select
+                      value={d.difficulty}
+                      onChange={(e) => updateDraft(i, { difficulty: e.target.value })}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      <option value="easy">easy</option>
+                      <option value="medium">medium</option>
+                      <option value="hard">hard</option>
+                    </select>
+                  </>
+                )}
+                {targetType === "project" && (
+                  <>
+                    <textarea
+                      value={d.description_md}
+                      onChange={(e) => updateDraft(i, { description_md: e.target.value })}
+                      placeholder="项目描述（Markdown）"
+                      rows={3}
+                      className={inputCls}
+                    />
+                    <textarea
+                      value={d.implementation_md}
+                      onChange={(e) => updateDraft(i, { implementation_md: e.target.value })}
+                      placeholder="实现说明（可选）"
+                      rows={2}
+                      className={inputCls}
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {targetType !== "interview" && (
           <div>
@@ -353,10 +684,17 @@ function SubmitInner() {
                     <textarea
                       value={qa.answer}
                       onChange={(e) => updateQa(i, { answer: e.target.value })}
-                      placeholder="答案 / 参考回答（可选）"
+                      placeholder="答案 / 参考回答（可选，可点下方 AI 生成后人工确认）"
                       rows={2}
                       className={inputCls}
                     />
+                    <button
+                      type="button"
+                      onClick={() => completeQaAnswer(i)}
+                      className="mt-1 text-xs text-brand-600 hover:underline"
+                    >
+                      AI 生成答案
+                    </button>
                   </div>
                 ))}
               </div>

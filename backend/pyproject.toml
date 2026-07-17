@@ -52,6 +52,8 @@ extend-immutable-calls = [
     "fastapi.Depends",
     "fastapi.Query",
     "fastapi.Security",
+    "fastapi.Form",
+    "fastapi.File",
 ]
 
 [tool.mypy]
