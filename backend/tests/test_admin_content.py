@@ -138,6 +138,39 @@ async def test_admin_knowledge_crud_and_visibility(client: AsyncClient, db: Asyn
     assert all(i["id"] != item_id for i in resp.json())
 
 
+async def test_admin_interview_tree_and_create_company(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin_token = await _register_and_login(client, "itree@test.io")
+    await _promote_admin(db, "itree@test.io")
+
+    # 新建空公司文件夹
+    resp = await client.post(
+        "/admin/content/interview/company",
+        headers=_auth(admin_token),
+        json={"name": "空壳公司"},
+    )
+    assert resp.status_code == 201, resp.text
+
+    # 该公司下建一条面经
+    await client.post(
+        "/admin/content/interview",
+        headers=_auth(admin_token),
+        json={
+            "company_name": "空壳公司",
+            "interview_type": "social",
+            "qa_items": [{"section": "round1", "question": "问一个问题", "answer": "答"}],
+        },
+    )
+
+    tree = (await client.get("/admin/content/interview/tree", headers=_auth(admin_token))).json()
+    node = next(c for c in tree if c["name"] == "空壳公司")
+    assert len(node["posts"]) == 1
+    post = node["posts"][0]
+    assert post["interview_type"] == "social"
+    assert post["label"] == "问一个问题"  # 首个问题作为文件名
+
+
 async def test_admin_content_requires_admin(client: AsyncClient) -> None:
     user_token = await _register_and_login(client, "plain@test.io")
     resp = await client.post(

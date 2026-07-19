@@ -13,6 +13,7 @@ import {
   extractFile,
   getAccessToken,
   getCategories,
+  getCompanies,
   getMySubmissions,
   parseSubmission,
   retrySubmission,
@@ -179,6 +180,7 @@ function SubmitInner() {
   const [level, setLevel] = useState("basic");
   const [categoryId, setCategoryId] = useState("");
   const [folders, setFolders] = useState<FolderOption[]>([]);
+  const [companyNames, setCompanyNames] = useState<string[]>([]);
   const [accessType, setAccessType] = useState<"free" | "paid">("free");
   const [implementation, setImplementation] = useState("");
   const [priceCash, setPriceCash] = useState("");
@@ -215,6 +217,9 @@ function SubmitInner() {
     getCategories("knowledge")
       .then((tree) => setFolders(flattenCategories(tree)))
       .catch(() => setFolders([]));
+    getCompanies()
+      .then((cs) => setCompanyNames(cs.map((c) => c.name)))
+      .catch(() => setCompanyNames([]));
   }, []);
 
   // 异步加工时投稿会停留在「加工中」，轮询刷新直到状态流转。
@@ -701,7 +706,22 @@ function SubmitInner() {
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-[160px]">
                 <label className="mb-1 block text-sm font-medium text-slate-700">企业名称</label>
-                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required className={inputCls} />
+                <input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                  list="company-options"
+                  placeholder="从已有公司选择，或直接输入新公司"
+                  className={inputCls}
+                />
+                <datalist id="company-options">
+                  {companyNames.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-xs text-slate-400">
+                  优先从下拉里选择已有公司，避免同一公司出现多个名称。
+                </p>
               </div>
               <div className="flex-1 min-w-[160px]">
                 <label className="mb-1 block text-sm font-medium text-slate-700">类型</label>

@@ -263,10 +263,14 @@ export function AiImportPanel({
   type,
   onDone,
   presetCategoryId,
+  presetCompanyName,
+  presetInterviewType,
 }: {
   type: ContentType;
   onDone: () => void;
   presetCategoryId?: number | null;
+  presetCompanyName?: string;
+  presetInterviewType?: string;
 }) {
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
@@ -307,10 +311,13 @@ export function AiImportPanel({
           difficulty: str(it.difficulty) || "medium",
           description_md: str(it.description_md),
           implementation_md: str(it.implementation_md),
-          company_name: str(it.company_name),
-          interview_type: ["social", "campus", "daily", "summer"].includes(str(it.interview_type))
-            ? str(it.interview_type)
-            : "campus",
+          company_name: presetCompanyName || str(it.company_name),
+          interview_type:
+            presetInterviewType && ["social", "campus", "daily", "summer"].includes(presetInterviewType)
+              ? presetInterviewType
+              : ["social", "campus", "daily", "summer"].includes(str(it.interview_type))
+                ? str(it.interview_type)
+                : "campus",
           qa_items:
             qa.length > 0
               ? qa.map((q) => ({
@@ -592,12 +599,16 @@ export function ContentForm({
   type,
   editingId,
   presetCategoryId,
+  presetCompanyName,
+  presetInterviewType,
   onSaved,
   onCancel,
 }: {
   type: ContentType;
   editingId: number | null;
   presetCategoryId?: number | null;
+  presetCompanyName?: string;
+  presetInterviewType?: string;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -625,6 +636,10 @@ export function ContentForm({
       const v = emptyValues(type);
       if (presetCategoryId != null && (type === "knowledge" || type === "sql")) {
         v.category_id = String(presetCategoryId);
+      }
+      if (type === "interview") {
+        if (presetCompanyName) v.company_name = presetCompanyName;
+        if (presetInterviewType) v.interview_type = presetInterviewType;
       }
       setValues(v);
       setQaItems([emptyQa()]);
@@ -662,7 +677,7 @@ export function ContentForm({
       })
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"))
       .finally(() => setLoading(false));
-  }, [type, editingId, presetCategoryId]);
+  }, [type, editingId, presetCategoryId, presetCompanyName, presetInterviewType]);
 
   function buildBody(): Record<string, unknown> {
     const body: Record<string, unknown> = { status };

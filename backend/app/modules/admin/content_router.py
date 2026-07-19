@@ -6,8 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import require_admin
 from app.modules.admin.content_schemas import (
+    CompanyCreate,
+    CompanyOut,
     ContentSummary,
+    InterviewCompanyNode,
     InterviewCreate,
+    InterviewPostItem,
     InterviewUpdate,
     KnowledgeCreate,
     KnowledgeUpdate,
@@ -175,6 +179,41 @@ async def list_interview(db: AsyncSession = Depends(get_db)) -> list[ContentSumm
         )
         for p in posts
     ]
+
+
+@router.get("/interview/tree", response_model=list[InterviewCompanyNode])
+async def interview_tree(db: AsyncSession = Depends(get_db)) -> list[InterviewCompanyNode]:
+    """面经目录：公司（含无面经的公司）→ 其下的面经文件。类型子文件夹由前端固定展示。"""
+    posts = await interview_service.list_all(db)
+    companies = await InterviewRepository(db).list_companies()
+    by_company: dict[int, list[InterviewPostItem]] = {}
+    for p in posts:
+        first_q = next((q.question.strip() for q in p.qa if q.question.strip()), "")
+        label = first_q[:24] + "…" if len(first_q) > 24 else first_q
+        by_company.setdefault(p.company_id, []).append(
+            InterviewPostItem(
+                id=p.id,
+                interview_type=p.interview_type,
+                status=p.status,
+                label=label or f"面经 #{p.id}",
+            )
+        )
+    return [
+        InterviewCompanyNode(id=c.id, name=c.name, posts=by_company.get(c.id, []))
+        for c in companies
+    ]
+
+
+@router.post("/interview/company", response_model=CompanyOut, status_code=status.HTTP_201_CREATED)
+async def create_company(data: CompanyCreate, db: AsyncSession = Depends(get_db)) -> CompanyOut:
+    """新建（空）公司文件夹；已存在则返回已有公司。"""
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="公司名称不能为空")
+    company = await interview_service.get_or_create_company(db, name)
+    await db.commit()
+    await db.refresh(company)
+    return CompanyOut(id=company.id, name=company.name)
 
 
 @router.get("/interview/{post_id}/detail")

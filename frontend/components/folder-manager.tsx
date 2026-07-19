@@ -5,19 +5,26 @@ import { useCallback, useEffect, useState, type DragEvent } from "react";
 import { AiImportPanel, ContentForm } from "@/components/content-manager";
 import {
   adminCreateCategory,
+  adminCreateCompany,
   adminDeleteCategory,
   adminDeleteContent,
   adminGetFolderTree,
+  adminGetInterviewTree,
   adminListContent,
   adminReorderCategories,
   adminUpdateCategory,
   adminUpdateContent,
   getAccessToken,
+  INTERVIEW_TYPE_LABEL,
   type ContentSummary,
   type ContentType,
   type FolderItem,
   type FolderNode,
+  type InterviewCompanyNode,
 } from "@/lib/api";
+
+// 面经四类子文件夹固定展示，顺序：日常实习 / 暑期实习 / 校招 / 社招。
+const INTERVIEW_TYPE_FOLDERS = ["daily", "summer", "campus", "social"] as const;
 
 type Section = ContentType;
 
@@ -53,7 +60,7 @@ interface DropHint {
   mode: DropMode;
 }
 type Dialog =
-  | { mode: "new"; presetCat: number | null }
+  | { mode: "new"; presetCat: number | null; presetCompany?: string; presetType?: string }
   | { mode: "edit"; editingId: number };
 
 function flatten(roots: FolderNode[]): { flats: Flat[]; files: Map<number, FolderItem[]> } {
@@ -153,6 +160,9 @@ export function FolderManager() {
   const [files, setFiles] = useState<Map<number, FolderItem[]>>(new Map());
   const [uncategorized, setUncategorized] = useState<FolderItem[]>([]);
   const [flatFiles, setFlatFiles] = useState<ContentSummary[]>([]);
+  const [interviewTree, setInterviewTree] = useState<InterviewCompanyNode[]>([]);
+  const [expandedCo, setExpandedCo] = useState<Set<number>>(new Set());
+  const [expandedType, setExpandedType] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -179,6 +189,10 @@ export function FolderManager() {
           setUncategorized(tree.uncategorized ?? []);
           setExpanded(new Set(fl.map((f) => f.id)));
         })
+        .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+    } else if (s === "interview") {
+      adminGetInterviewTree(token)
+        .then(setInterviewTree)
         .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
     } else {
       adminListContent(token, s)
@@ -302,6 +316,143 @@ export function FolderManager() {
   function closeDialogAndReload() {
     setDialog(null);
     load(section);
+  }
+
+  function toggleSet<T>(setter: (fn: (prev: Set<T>) => Set<T>) => void, key: T) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function addCompany() {
+    const name = window.prompt("新建公司名称：");
+    if (!name || !name.trim()) return;
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await adminCreateCompany(token, name.trim());
+      load("interview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "新建公司失败");
+    }
+  }
+
+  function renderInterviewTree() {
+    if (interviewTree.length === 0) {
+      return (
+        <p className="py-4 text-center text-sm text-slate-400">
+          还没有公司，点右上角「+ 新建公司」或「+ 添加文件」开始。
+        </p>
+      );
+    }
+    return interviewTree.map((co) => {
+      const coOpen = expandedCo.has(co.id);
+      const known = new Set<string>(INTERVIEW_TYPE_FOLDERS);
+      const others = co.posts.filter((p) => !p.interview_type || !known.has(p.interview_type));
+      return (
+        <div key={co.id}>
+          <div
+            className="group flex items-center gap-1 rounded py-1 pr-2 text-sm hover:bg-slate-50"
+            style={{ paddingLeft: "4px" }}
+          >
+            <button
+              onClick={() => toggleSet(setExpandedCo, co.id)}
+              className="w-4 shrink-0 text-xs text-slate-400"
+              aria-label="展开/折叠"
+            >
+              {coOpen ? "▾" : "▸"}
+            </button>
+            <span className="text-base">🏢</span>
+            <span className="flex-1 truncate font-medium text-slate-800">{co.name}</span>
+            <span className="text-xs text-slate-400">{co.posts.length} 篇</span>
+            <span className="ml-2 hidden shrink-0 gap-2 text-xs group-hover:flex">
+              <button
+                onClick={() => {
+                  setExpandedCo((p) => new Set(p).add(co.id));
+                  setDialog({ mode: "new", presetCat: null, presetCompany: co.name });
+                }}
+                className="text-green-600 hover:underline"
+              >
+                ＋面经
+              </button>
+            </span>
+          </div>
+
+          {coOpen && (
+            <div>
+              {INTERVIEW_TYPE_FOLDERS.map((t) => {
+                const key = `${co.id}:${t}`;
+                const typeOpen = expandedType.has(key);
+                const posts = co.posts.filter((p) => p.interview_type === t);
+                return (
+                  <div key={key}>
+                    <div
+                      className="group flex items-center gap-1 rounded py-1 pr-2 text-sm hover:bg-slate-50"
+                      style={{ paddingLeft: "22px" }}
+                    >
+                      <button
+                        onClick={() => toggleSet(setExpandedType, key)}
+                        className="w-4 shrink-0 text-xs text-slate-400"
+                        aria-label="展开/折叠"
+                      >
+                        {posts.length ? (typeOpen ? "▾" : "▸") : "·"}
+                      </button>
+                      <span>📁</span>
+                      <span className="flex-1 truncate text-slate-700">
+                        {INTERVIEW_TYPE_LABEL[t] ?? t}
+                      </span>
+                      <span className="text-xs text-slate-400">{posts.length}</span>
+                      <span className="ml-2 hidden shrink-0 text-xs group-hover:flex">
+                        <button
+                          onClick={() => {
+                            setExpandedType((p) => new Set(p).add(key));
+                            setDialog({
+                              mode: "new",
+                              presetCat: null,
+                              presetCompany: co.name,
+                              presetType: t,
+                            });
+                          }}
+                          className="text-green-600 hover:underline"
+                        >
+                          ＋新建面经
+                        </button>
+                      </span>
+                    </div>
+                    {typeOpen &&
+                      posts.map((p) =>
+                        fileRow(
+                          { id: p.id, title: p.label, status: p.status },
+                          { draggable: false, paddingLeft: 46 },
+                        ),
+                      )}
+                  </div>
+                );
+              })}
+              {others.length > 0 && (
+                <div>
+                  <div
+                    className="flex items-center gap-1 py-1 text-sm text-slate-400"
+                    style={{ paddingLeft: "22px" }}
+                  >
+                    <span className="w-4" />📁 其他 / 未标类型（{others.length}）
+                  </div>
+                  {others.map((p) =>
+                    fileRow(
+                      { id: p.id, title: p.label, status: p.status },
+                      { draggable: false, paddingLeft: 46 },
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    });
   }
 
   // ---- 拖拽 ----
@@ -531,13 +682,23 @@ export function FolderManager() {
               + 新建顶层文件夹
             </button>
           )}
+          {section === "interview" && (
+            <button
+              onClick={addCompany}
+              className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建公司
+            </button>
+          )}
         </div>
       </div>
 
       <p className="mb-3 text-xs text-slate-500">
         {withFolders
           ? "像管理文件夹一样：拖拽文件夹移动/改变层级（中间=放入其中，上/下沿=同级排序）；把内容（📄）拖进文件夹即归类；双击名称可重命名。悬停文件可编辑/下架/删除。"
-          : "该板块无需分类，直接以文件列表管理。「添加文件」可 AI 解析或手动录入；悬停文件可编辑/下架/删除。"}
+          : section === "interview"
+            ? "公司=文件夹，日常实习/暑期实习/校招/社招=固定子文件夹，每篇面经=一个文件。在某类型下「＋新建面经」即新增一次面经；悬停文件可编辑/下架/删除。"
+            : "该板块无需分类，直接以文件列表管理。「添加文件」可 AI 解析或手动录入；悬停文件可编辑/下架/删除。"}
       </p>
 
       <div className="mb-4 flex gap-2">
@@ -610,6 +771,8 @@ export function FolderManager() {
             </div>
           )}
         </>
+      ) : section === "interview" ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">{renderInterviewTree()}</div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           {flatFiles.length === 0 ? (
@@ -642,6 +805,8 @@ export function FolderManager() {
                 <AiImportPanel
                   type={section}
                   presetCategoryId={dialog.presetCat}
+                  presetCompanyName={dialog.presetCompany}
+                  presetInterviewType={dialog.presetType}
                   onDone={closeDialogAndReload}
                 />
                 <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
@@ -653,6 +818,8 @@ export function FolderManager() {
                   type={section}
                   editingId={null}
                   presetCategoryId={dialog.presetCat}
+                  presetCompanyName={dialog.presetCompany}
+                  presetInterviewType={dialog.presetType}
                   onSaved={closeDialogAndReload}
                   onCancel={() => setDialog(null)}
                 />
