@@ -612,6 +612,34 @@ export function getInterviewDetail(id: number): Promise<InterviewCard> {
   return request<InterviewCard>(`/interviews/${id}`);
 }
 
+// ---- 管理端面经目录（公司=文件夹，类型=子文件夹，面经=文件） ----
+export interface InterviewPostItem {
+  id: number;
+  interview_type: string | null;
+  status: string;
+  label: string;
+}
+
+export interface InterviewCompanyNode {
+  id: number;
+  name: string;
+  posts: InterviewPostItem[];
+}
+
+export function adminGetInterviewTree(token: string): Promise<InterviewCompanyNode[]> {
+  return authRequest<InterviewCompanyNode[]>("/admin/content/interview/tree", token);
+}
+
+export function adminCreateCompany(
+  token: string,
+  name: string,
+): Promise<{ id: number; name: string }> {
+  return authRequest<{ id: number; name: string }>("/admin/content/interview/company", token, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
 // ---- Projects ----
 export interface ProjectListItem {
   id: number;

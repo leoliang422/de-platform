@@ -73,6 +73,30 @@ class InterviewUpdate(BaseModel):
     status: str | None = None
 
 
+class CompanyCreate(BaseModel):
+    name: str
+
+
+class CompanyOut(BaseModel):
+    id: int
+    name: str
+
+
+class InterviewPostItem(BaseModel):
+    id: int
+    interview_type: str | None = None
+    status: str
+    label: str
+
+
+class InterviewCompanyNode(BaseModel):
+    """管理端面经目录：公司=文件夹，四个类型=子文件夹（前端固定展示），面经=文件。"""
+
+    id: int
+    name: str
+    posts: list[InterviewPostItem] = []
+
+
 # ---- project ----
 class ProjectCreate(BaseModel):
     title: str
