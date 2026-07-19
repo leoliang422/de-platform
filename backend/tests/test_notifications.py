@@ -4,6 +4,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.catalog.models import Category
 from app.modules.users.models import User
 
 
@@ -26,18 +27,27 @@ async def _make_admin(db: AsyncSession, email: str) -> None:
     await db.commit()
 
 
-async def _submit(client: AsyncClient, token: str, title: str) -> int:
+async def _submit(client: AsyncClient, db: AsyncSession, token: str, title: str) -> int:
+    cat = Category(section="knowledge", name="Hive", slug="hive", order=0)
+    db.add(cat)
+    await db.commit()
+    await db.refresh(cat)
     resp = await client.post(
         "/submissions",
         headers=_auth(token),
-        json={"target_type": "knowledge", "title": title, "raw_content": "内容"},
+        json={
+            "target_type": "knowledge",
+            "title": title,
+            "raw_content": "内容",
+            "category_id": cat.id,
+        },
     )
     return resp.json()["id"]
 
 
 async def test_approve_notifies_author(client: AsyncClient, db: AsyncSession) -> None:
     author = await _register_and_login(client, "author@test.io")
-    sid = await _submit(client, author, "我的知识")
+    sid = await _submit(client, db, author, "我的知识")
 
     admin = await _register_and_login(client, "admin1@test.io")
     await _make_admin(db, "admin1@test.io")
@@ -58,7 +68,7 @@ async def test_approve_notifies_author(client: AsyncClient, db: AsyncSession) ->
 
 async def test_reject_notifies_author(client: AsyncClient, db: AsyncSession) -> None:
     author = await _register_and_login(client, "author2@test.io")
-    sid = await _submit(client, author, "待驳回")
+    sid = await _submit(client, db, author, "待驳回")
 
     admin = await _register_and_login(client, "admin2@test.io")
     await _make_admin(db, "admin2@test.io")
@@ -76,7 +86,7 @@ async def test_reject_notifies_author(client: AsyncClient, db: AsyncSession) -> 
 
 async def test_mark_read_and_read_all(client: AsyncClient, db: AsyncSession) -> None:
     author = await _register_and_login(client, "author3@test.io")
-    sid = await _submit(client, author, "标记已读")
+    sid = await _submit(client, db, author, "标记已读")
     admin = await _register_and_login(client, "admin3@test.io")
     await _make_admin(db, "admin3@test.io")
     await client.post(f"/admin/submissions/{sid}/approve", headers=_auth(admin))
@@ -97,7 +107,7 @@ async def test_mark_read_and_read_all(client: AsyncClient, db: AsyncSession) -> 
 
 async def test_cannot_read_others_notification(client: AsyncClient, db: AsyncSession) -> None:
     author = await _register_and_login(client, "author4@test.io")
-    sid = await _submit(client, author, "私有通知")
+    sid = await _submit(client, db, author, "私有通知")
     admin = await _register_and_login(client, "admin4@test.io")
     await _make_admin(db, "admin4@test.io")
     await client.post(f"/admin/submissions/{sid}/approve", headers=_auth(admin))

@@ -25,6 +25,74 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def test_admin_category_folder_tree_and_reorder(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin_token = await _register_and_login(client, "folderadmin@test.io")
+    await _promote_admin(db, "folderadmin@test.io")
+
+    # 建两个根文件夹（slug 留空由后端自动生成）
+    hive = (
+        await client.post(
+            "/admin/categories",
+            headers=_auth(admin_token),
+            json={"section": "knowledge", "name": "Hive"},
+        )
+    ).json()
+    spark = (
+        await client.post(
+            "/admin/categories",
+            headers=_auth(admin_token),
+            json={"section": "knowledge", "name": "Spark"},
+        )
+    ).json()
+    assert hive["slug"]  # 自动生成
+    assert spark["slug"]
+
+    # 放一条八股到 Hive 下（当"文件"）
+    await client.post(
+        "/admin/content/knowledge",
+        headers=_auth(admin_token),
+        json={"title": "数据倾斜", "content_md": "x", "category_id": hive["id"]},
+    )
+
+    # 文件夹树：Hive 下有一条文件
+    tree = (
+        await client.get(
+            "/admin/categories/tree",
+            headers=_auth(admin_token),
+            params={"section": "knowledge"},
+        )
+    ).json()
+    hive_node = next(r for r in tree["roots"] if r["id"] == hive["id"])
+    assert [i["title"] for i in hive_node["items"]] == ["数据倾斜"]
+
+    # 拖拽：把 Spark 挪到 Hive 下作为子文件夹
+    resp = await client.post(
+        "/admin/categories/reorder",
+        headers=_auth(admin_token),
+        json={
+            "section": "knowledge",
+            "items": [
+                {"id": hive["id"], "parent_id": None, "order": 0},
+                {"id": spark["id"], "parent_id": hive["id"], "order": 0},
+            ],
+        },
+    )
+    assert resp.status_code == 204, resp.text
+
+    tree = (
+        await client.get(
+            "/admin/categories/tree",
+            headers=_auth(admin_token),
+            params={"section": "knowledge"},
+        )
+    ).json()
+    assert len(tree["roots"]) == 1  # 只剩 Hive 作为根
+    hive_node = tree["roots"][0]
+    assert [c["id"] for c in hive_node["children"]] == [spark["id"]]
+
+
 async def test_admin_knowledge_crud_and_visibility(client: AsyncClient, db: AsyncSession) -> None:
     admin_token = await _register_and_login(client, "kadmin@test.io")
     await _promote_admin(db, "kadmin@test.io")

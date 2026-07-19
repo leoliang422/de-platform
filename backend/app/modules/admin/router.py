@@ -11,7 +11,13 @@ from app.modules.admin.schemas import (
 )
 from app.modules.catalog import service as catalog_service
 from app.modules.catalog.repository import CategoryRepository
-from app.modules.catalog.schemas import CategoryCreate, CategoryOut, CategoryUpdate
+from app.modules.catalog.schemas import (
+    CategoryCreate,
+    CategoryOut,
+    CategoryReorderIn,
+    CategoryUpdate,
+    FolderTree,
+)
 from app.modules.points.models import PointLedger
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import RejectIn, SubmissionOut
@@ -54,6 +60,20 @@ async def list_categories(
 ) -> list[CategoryOut]:
     items = await CategoryRepository(db).list_by_section(section)
     return [CategoryOut.model_validate(c) for c in items]
+
+
+@router.get("/categories/tree", response_model=FolderTree)
+async def category_folder_tree(
+    section: str = Query(...), db: AsyncSession = Depends(get_db)
+) -> FolderTree:
+    """文件夹式管理视图：分类当文件夹，八股/SQL 当文件夹内文件。"""
+    return await catalog_service.build_folder_tree(db, section)
+
+
+@router.post("/categories/reorder", status_code=status.HTTP_204_NO_CONTENT)
+async def reorder_categories(data: CategoryReorderIn, db: AsyncSession = Depends(get_db)) -> None:
+    """拖拽后整体保存层级与顺序。"""
+    await catalog_service.reorder_categories(db, data.section, data.items)
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)

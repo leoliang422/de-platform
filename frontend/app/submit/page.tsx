@@ -12,14 +12,37 @@ import {
   createSubmission,
   extractFile,
   getAccessToken,
+  getCategories,
   getMySubmissions,
   parseSubmission,
   retrySubmission,
+  type CategoryNode,
   type InterviewQAInput,
   type Submission,
   type SubmissionCreateInput,
   type TargetType,
 } from "@/lib/api";
+
+interface FolderOption {
+  id: number;
+  depth: number;
+  name: string;
+  path: string;
+}
+
+function flattenCategories(
+  nodes: CategoryNode[],
+  depth = 0,
+  parentPath = "",
+): FolderOption[] {
+  const out: FolderOption[] = [];
+  for (const n of nodes) {
+    const path = parentPath ? `${parentPath} / ${n.name}` : n.name;
+    out.push({ id: n.id, depth, name: n.name, path });
+    out.push(...flattenCategories(n.children, depth + 1, path));
+  }
+  return out;
+}
 
 // 批量解析后的可编辑草稿（字段按模块使用其中一部分）
 interface Draft {
@@ -154,6 +177,8 @@ function SubmitInner() {
     { section: "round1", question: "", answer: "" },
   ]);
   const [level, setLevel] = useState("basic");
+  const [categoryId, setCategoryId] = useState("");
+  const [folders, setFolders] = useState<FolderOption[]>([]);
   const [accessType, setAccessType] = useState<"free" | "paid">("free");
   const [implementation, setImplementation] = useState("");
   const [priceCash, setPriceCash] = useState("");
@@ -185,6 +210,12 @@ function SubmitInner() {
   useEffect(() => {
     loadMine();
   }, [loadMine]);
+
+  useEffect(() => {
+    getCategories("knowledge")
+      .then((tree) => setFolders(flattenCategories(tree)))
+      .catch(() => setFolders([]));
+  }, []);
 
   // 异步加工时投稿会停留在「加工中」，轮询刷新直到状态流转。
   useEffect(() => {
@@ -333,6 +364,10 @@ function SubmitInner() {
   async function handleBatchSubmit() {
     const token = getAccessToken();
     if (!token || drafts.length === 0) return;
+    if (targetType === "knowledge" && !categoryId) {
+      setParseErr("请先在上方选择「所属文件夹」再批量提交。");
+      return;
+    }
     setBatchSubmitting(true);
     setParseErr(null);
     setParseMsg(null);
@@ -351,6 +386,7 @@ function SubmitInner() {
         prompt_md: targetType === "sql" ? d.prompt_md : undefined,
         difficulty: targetType === "sql" ? d.difficulty : undefined,
         implementation_md: targetType === "project" ? d.implementation_md : undefined,
+        category_id: targetType === "knowledge" && categoryId ? Number(categoryId) : undefined,
       };
       try {
         await createSubmission(token, payload);
@@ -395,6 +431,7 @@ function SubmitInner() {
       price_cash: targetType === "project" && paid ? priceCash || null : undefined,
       price_points:
         targetType === "project" && paid && pricePoints ? Number(pricePoints) : undefined,
+      category_id: targetType === "knowledge" && categoryId ? Number(categoryId) : undefined,
     };
 
     setSubmitting(true);
@@ -441,6 +478,39 @@ function SubmitInner() {
             ))}
           </select>
         </div>
+
+        {targetType === "knowledge" && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              所属文件夹 <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              required
+              className={inputCls}
+            >
+              <option value="">— 请选择投稿到哪个文件夹 —</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {"\u3000".repeat(f.depth)}
+                  {f.depth > 0 ? "└ " : ""}
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            {categoryId && (
+              <p className="mt-1 text-xs text-slate-500">
+                投稿位置：{folders.find((f) => String(f.id) === categoryId)?.path}
+              </p>
+            )}
+            {folders.length === 0 && (
+              <p className="mt-1 text-xs text-amber-600">
+                暂无文件夹，请联系管理员在后台「目录管理」中创建。
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-4">
           <p className="text-sm font-semibold text-slate-800">

@@ -2,9 +2,18 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.catalog.models import Category
 from app.modules.points.models import PointLedger
 from app.modules.points.service import PointsService
 from app.modules.users.models import User
+
+
+async def _make_category(db: AsyncSession, name: str = "Hive") -> int:
+    cat = Category(section="knowledge", name=name, slug=name.lower(), order=0)
+    db.add(cat)
+    await db.commit()
+    await db.refresh(cat)
+    return cat.id
 
 
 async def _register_and_login(client: AsyncClient, email: str) -> str:
@@ -31,6 +40,7 @@ async def test_knowledge_submission_review_and_points(
     client: AsyncClient, db: AsyncSession
 ) -> None:
     user_token = await _register_and_login(client, "author@test.io")
+    cat_id = await _make_category(db)
 
     resp = await client.post(
         "/submissions",
@@ -39,6 +49,7 @@ async def test_knowledge_submission_review_and_points(
             "target_type": "knowledge",
             "title": "Hive 小文件治理",
             "raw_content": "小文件太多影响性能，可用 concatenate、合并任务等。",
+            "category_id": cat_id,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -70,10 +81,16 @@ async def test_knowledge_submission_review_and_points(
 
 async def test_reject_does_not_grant_points(client: AsyncClient, db: AsyncSession) -> None:
     user_token = await _register_and_login(client, "author2@test.io")
+    cat_id = await _make_category(db)
     resp = await client.post(
         "/submissions",
         headers=_auth(user_token),
-        json={"target_type": "knowledge", "title": "t", "raw_content": "raw body"},
+        json={
+            "target_type": "knowledge",
+            "title": "t",
+            "raw_content": "raw body",
+            "category_id": cat_id,
+        },
     )
     sub_id = resp.json()["id"]
 
