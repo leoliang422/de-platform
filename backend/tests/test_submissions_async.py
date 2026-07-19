@@ -9,9 +9,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.modules.catalog.models import Category
 from app.modules.submissions.models import Submission
 from app.modules.submissions.service import SubmissionService
 from app.modules.users.models import User
+
+
+async def _make_category(db: AsyncSession) -> int:
+    cat = Category(section="knowledge", name="Hive", slug="hive", order=0)
+    db.add(cat)
+    await db.commit()
+    await db.refresh(cat)
+    return cat.id
 
 
 async def _register_and_login(client: AsyncClient, email: str) -> str:
@@ -65,10 +74,16 @@ async def test_enqueue_path_returns_processing(
     get_settings.cache_clear()
     try:
         token = await _register_and_login(client, "async1@test.io")
+        cat_id = await _make_category(db)
         resp = await client.post(
             "/submissions",
             headers=_auth(token),
-            json={"target_type": "knowledge", "title": "T", "raw_content": "hello"},
+            json={
+                "target_type": "knowledge",
+                "title": "T",
+                "raw_content": "hello",
+                "category_id": cat_id,
+            },
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["status"] == "processing"  # 异步：加工交给 Worker
@@ -88,10 +103,16 @@ async def test_enqueue_failure_falls_back_to_sync(
     get_settings.cache_clear()
     try:
         token = await _register_and_login(client, "async2@test.io")
+        cat_id = await _make_category(db)
         resp = await client.post(
             "/submissions",
             headers=_auth(token),
-            json={"target_type": "knowledge", "title": "T", "raw_content": "hello"},
+            json={
+                "target_type": "knowledge",
+                "title": "T",
+                "raw_content": "hello",
+                "category_id": cat_id,
+            },
         )
         assert resp.status_code == 201, resp.text
         # 入队失败自动回退同步加工，投稿不会卡在 processing。

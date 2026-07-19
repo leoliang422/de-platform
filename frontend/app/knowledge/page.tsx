@@ -218,15 +218,6 @@ function CategoryTree({
             >
               {n.name}
             </button>
-            {depth === 0 && (
-              <Link
-                href={`/knowledge/tree/${n.id}`}
-                title="查看该分类知识树"
-                className="shrink-0 rounded px-1.5 py-1 text-sm text-slate-400 hover:bg-slate-100 hover:text-brand-600"
-              >
-                🌳
-              </Link>
-            )}
           </div>
           {n.children.length > 0 && (
             <CategoryTree

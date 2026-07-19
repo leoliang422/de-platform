@@ -765,7 +765,7 @@ export function adminListCategories(
 
 export function adminCreateCategory(
   token: string,
-  input: { section: string; name: string; slug: string; parent_id?: number | null; order?: number },
+  input: { section: string; name: string; slug?: string; parent_id?: number | null; order?: number },
 ): Promise<CategoryFlat> {
   return authRequest<CategoryFlat>("/admin/categories", token, {
     method: "POST",
@@ -773,8 +773,60 @@ export function adminCreateCategory(
   });
 }
 
+export function adminUpdateCategory(
+  token: string,
+  id: number,
+  input: { name?: string; parent_id?: number | null; order?: number },
+): Promise<CategoryFlat> {
+  return authRequest<CategoryFlat>(`/admin/categories/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export function adminDeleteCategory(token: string, id: number): Promise<void> {
   return authRequest<void>(`/admin/categories/${id}`, token, { method: "DELETE" });
+}
+
+// ---- 管理端文件夹树（分类=文件夹，八股/SQL=文件） ----
+export interface FolderItem {
+  id: number;
+  title: string;
+  status: string;
+}
+
+export interface FolderNode {
+  id: number;
+  name: string;
+  order: number;
+  children: FolderNode[];
+  items: FolderItem[];
+}
+
+export interface FolderTree {
+  roots: FolderNode[];
+  uncategorized: FolderItem[];
+}
+
+export function adminGetFolderTree(token: string, section: string): Promise<FolderTree> {
+  return authRequest<FolderTree>(`/admin/categories/tree?section=${section}`, token);
+}
+
+export interface CategoryReorderItem {
+  id: number;
+  parent_id: number | null;
+  order: number;
+}
+
+export function adminReorderCategories(
+  token: string,
+  section: string,
+  items: CategoryReorderItem[],
+): Promise<void> {
+  return authRequest<void>("/admin/categories/reorder", token, {
+    method: "POST",
+    body: JSON.stringify({ section, items }),
+  });
 }
 
 // ---- Admin 用户管理 ----

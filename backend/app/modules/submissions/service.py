@@ -82,6 +82,8 @@ class SubmissionService:
         # 非面经：需标题与正文
         _require(bool(data.title.strip()), "投稿需填写标题")
         _require(bool(data.raw_content.strip()), "投稿需填写正文")
+        if data.target_type == "knowledge":
+            _require(data.category_id is not None, "八股投稿需选择所属文件夹")
         if data.target_type == "sql":
             _require(bool(data.prompt_md), "SQL 投稿需填写题目")
 
