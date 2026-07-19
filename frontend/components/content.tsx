@@ -1,32 +1,185 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-const IMG_MD_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+// 行内语法：图片 / 链接 / 加粗 / 行内代码，按出现顺序切分。
+const INLINE_RE =
+  /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`/g;
+
+function renderInline(text: string, kp: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let i = 0;
+  let m: RegExpExecArray | null;
+  INLINE_RE.lastIndex = 0;
+  while ((m = INLINE_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      out.push(
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={`${kp}-${i++}`}
+          src={m[2]}
+          alt={m[1]}
+          className="my-2 block max-h-[28rem] max-w-full rounded-lg border border-slate-200"
+        />,
+      );
+    } else if (m[3] !== undefined) {
+      out.push(
+        <a
+          key={`${kp}-${i++}`}
+          href={m[4]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-brand-600 hover:underline"
+        >
+          {m[3]}
+        </a>,
+      );
+    } else if (m[5] !== undefined) {
+      out.push(<strong key={`${kp}-${i++}`}>{m[5]}</strong>);
+    } else if (m[6] !== undefined) {
+      out.push(
+        <code
+          key={`${kp}-${i++}`}
+          className="rounded bg-slate-200 px-1 py-0.5 text-[0.85em] text-slate-800"
+        >
+          {m[6]}
+        </code>,
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// 轻量 Markdown 渲染：标题 / 列表 / 代码块 / 图片 / 段落，无第三方依赖。
+function renderMarkdown(md: string): ReactNode[] {
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let key = 0;
+  let para: string[] = [];
+  let i = 0;
+
+  const flushPara = () => {
+    if (para.length === 0) return;
+    const nodes: ReactNode[] = [];
+    para.forEach((ln, idx) => {
+      if (idx > 0) nodes.push(<br key={`br-${key}-${idx}`} />);
+      nodes.push(...renderInline(ln, `p-${key}-${idx}`));
+    });
+    blocks.push(
+      <p key={`p-${key}`} className="my-2 leading-relaxed">
+        {nodes}
+      </p>,
+    );
+    key++;
+    para = [];
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trim().startsWith("```")) {
+      flushPara();
+      const buf: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        buf.push(lines[i]);
+        i++;
+      }
+      i++;
+      blocks.push(
+        <pre
+          key={`c-${key++}`}
+          className="my-2 overflow-auto rounded-lg bg-slate-900 p-3 text-xs leading-relaxed text-slate-100"
+        >
+          <code>{buf.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+
+    if (line.trim() === "") {
+      flushPara();
+      i++;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flushPara();
+      const level = heading[1].length;
+      const cls =
+        level <= 1
+          ? "mt-4 mb-2 text-lg font-bold"
+          : level === 2
+            ? "mt-3 mb-1.5 text-base font-semibold"
+            : "mt-2 mb-1 text-sm font-semibold";
+      blocks.push(
+        <div key={`h-${key++}`} className={`${cls} text-slate-900`}>
+          {renderInline(heading[2], `h-${key}`)}
+        </div>,
+      );
+      i++;
+      continue;
+    }
+
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flushPara();
+      blocks.push(<hr key={`hr-${key++}`} className="my-3 border-slate-200" />);
+      i++;
+      continue;
+    }
+
+    if (/^\s*[-*•]\s+/.test(line)) {
+      flushPara();
+      const items: string[] = [];
+      while (i < lines.length && /^\s*[-*•]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*•]\s+/, ""));
+        i++;
+      }
+      const k = key++;
+      blocks.push(
+        <ul key={`ul-${k}`} className="my-2 list-disc space-y-1 pl-5">
+          {items.map((it, idx) => (
+            <li key={idx}>{renderInline(it, `ul-${k}-${idx}`)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      flushPara();
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
+        i++;
+      }
+      const k = key++;
+      blocks.push(
+        <ol key={`ol-${k}`} className="my-2 list-decimal space-y-1 pl-5">
+          {items.map((it, idx) => (
+            <li key={idx}>{renderInline(it, `ol-${k}-${idx}`)}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    para.push(line);
+    i++;
+  }
+  flushPara();
+  return blocks;
+}
 
 export function Prose({ children }: { children: string }) {
-  // 以预格式化展示 Markdown 原文，并把 ![alt](url) 图片语法渲染为内嵌图片。
-  const parts: ReactNode[] = [];
-  let last = 0;
-  let key = 0;
-  for (const m of children.matchAll(IMG_MD_RE)) {
-    const idx = m.index ?? 0;
-    if (idx > last) parts.push(<span key={key++}>{children.slice(last, idx)}</span>);
-    parts.push(
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        key={key++}
-        src={m[2]}
-        alt={m[1]}
-        className="my-2 block max-h-[28rem] max-w-full rounded-lg border border-slate-200"
-      />,
-    );
-    last = idx + m[0].length;
-  }
-  if (last < children.length) parts.push(<span key={key++}>{children.slice(last)}</span>);
-
+  // 渲染 Markdown：标题/列表/代码块/加粗/行内代码/内嵌图片，避免原始符号刷屏。
   return (
-    <div className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-800">
-      {parts}
+    <div className="break-words rounded-lg bg-slate-50 p-4 font-sans text-sm text-slate-800">
+      {renderMarkdown(children)}
     </div>
   );
 }

@@ -20,7 +20,7 @@ from app.modules.catalog.schemas import (
 )
 from app.modules.points.models import PointLedger
 from app.modules.submissions.repository import SubmissionRepository
-from app.modules.submissions.schemas import RejectIn, SubmissionOut
+from app.modules.submissions.schemas import ApproveIn, RejectIn, SubmissionOut
 from app.modules.submissions.service import SubmissionService
 from app.modules.users.models import User
 
@@ -39,9 +39,13 @@ async def list_submissions(
 
 @router.post("/submissions/{submission_id}/approve", response_model=SubmissionOut)
 async def approve_submission(
-    submission_id: int, db: AsyncSession = Depends(get_db)
+    submission_id: int,
+    data: ApproveIn | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> SubmissionOut:
-    submission = await SubmissionService(db).approve(submission_id)
+    submission = await SubmissionService(db).approve(
+        submission_id, data.content if data else None
+    )
     return SubmissionOut.model_validate(submission)
 
 

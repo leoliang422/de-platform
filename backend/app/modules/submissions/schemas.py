@@ -61,6 +61,11 @@ class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class ApproveIn(BaseModel):
+    # 管理员审核时可覆盖最终发布内容：可传用户原文、AI 整理稿或手动二次编辑后的文本。
+    content: str | None = None
+
+
 class ParseResult(BaseModel):
     target_type: str
     items: list[dict]

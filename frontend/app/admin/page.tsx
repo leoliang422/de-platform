@@ -47,10 +47,10 @@ function AdminInner() {
     load();
   }, [load]);
 
-  async function approve(id: number) {
+  async function approve(id: number, content?: string) {
     const token = getAccessToken();
     if (!token) return;
-    await adminApprove(token, id);
+    await adminApprove(token, id, content);
     load();
   }
 
@@ -74,29 +74,7 @@ function AdminInner() {
       ) : (
         <div className="space-y-4">
           {subs.map((s) => (
-            <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-medium text-slate-900">
-                  [{TYPE_LABELS[s.target_type] ?? s.target_type}] {s.title}
-                </span>
-                <span className="text-xs text-slate-400">用户 #{s.user_id}</span>
-              </div>
-              {s.processed_md && <Prose>{s.processed_md}</Prose>}
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => approve(s.id)}
-                  className="rounded-lg bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700"
-                >
-                  通过发布
-                </button>
-                <button
-                  onClick={() => reject(s.id)}
-                  className="rounded-lg border border-red-300 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50"
-                >
-                  驳回
-                </button>
-              </div>
-            </div>
+            <SubmissionReview key={s.id} sub={s} onApprove={approve} onReject={reject} />
           ))}
         </div>
       )}
@@ -104,6 +82,104 @@ function AdminInner() {
       <FolderManager />
 
       <UserManager />
+    </div>
+  );
+}
+
+function SubmissionReview({
+  sub,
+  onApprove,
+  onReject,
+}: {
+  sub: AdminSubmission;
+  onApprove: (id: number, content?: string) => Promise<void>;
+  onReject: (id: number) => Promise<void>;
+}) {
+  // 编辑器默认取 AI 整理稿；管理员可一键切换原文，或手动二次编辑后发布。
+  const [editor, setEditor] = useState(sub.processed_md ?? sub.raw_content);
+  const [busy, setBusy] = useState(false);
+  const isInterview = sub.target_type === "interview";
+
+  async function publish() {
+    setBusy(true);
+    try {
+      await onApprove(sub.id, editor);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-medium text-slate-900">
+          [{TYPE_LABELS[sub.target_type] ?? sub.target_type}] {sub.title}
+        </span>
+        <span className="text-xs text-slate-400">用户 #{sub.user_id}</span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">用户原文</span>
+            <button
+              type="button"
+              onClick={() => setEditor(sub.raw_content)}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              用此版本 →
+            </button>
+          </div>
+          <Prose>{sub.raw_content}</Prose>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">AI 整理稿</span>
+            <button
+              type="button"
+              onClick={() => setEditor(sub.processed_md ?? sub.raw_content)}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              用此版本 →
+            </button>
+          </div>
+          <Prose>{sub.processed_md ?? "（暂无 AI 稿）"}</Prose>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <label className="mb-1 block text-xs font-medium text-slate-500">
+          最终发布内容（可二次编辑，Markdown）
+        </label>
+        <textarea
+          value={editor}
+          onChange={(e) => setEditor(e.target.value)}
+          rows={10}
+          className="w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-relaxed focus:border-brand-500 focus:outline-none"
+        />
+        {isInterview && (
+          <p className="mt-1 text-xs text-amber-600">
+            面经按「企业 / 问答」结构化发布，此正文仅供参考，不影响最终展示。
+          </p>
+        )}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <button
+          disabled={busy}
+          onClick={publish}
+          className="rounded-lg bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          通过发布
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onReject(sub.id)}
+          className="rounded-lg border border-red-300 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+        >
+          驳回
+        </button>
+      </div>
     </div>
   );
 }

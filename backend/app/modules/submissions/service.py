@@ -151,7 +151,7 @@ class SubmissionService:
         await self.db.refresh(submission)
         return submission
 
-    async def approve(self, submission_id: int) -> Submission:
+    async def approve(self, submission_id: int, content: str | None = None) -> Submission:
         submission = await self.repo.get(submission_id)
         if submission is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投稿不存在")
@@ -160,6 +160,10 @@ class SubmissionService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"当前状态为 {submission.status}，无法审核发布",
             )
+
+        # 管理员可覆盖最终发布正文（原文 / AI 稿 / 手动编辑），置入 processed_md 后统一发布。
+        if content is not None and content.strip():
+            submission.processed_md = content
 
         ref_id = await self._publish(submission)
         submission.published_ref_id = ref_id

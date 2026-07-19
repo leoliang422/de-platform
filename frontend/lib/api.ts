@@ -762,9 +762,14 @@ export function adminListSubmissions(
   return authRequest<AdminSubmission[]>(`/admin/submissions?status=${status}`, token);
 }
 
-export function adminApprove(token: string, id: number): Promise<Submission> {
+export function adminApprove(
+  token: string,
+  id: number,
+  content?: string,
+): Promise<Submission> {
   return authRequest<Submission>(`/admin/submissions/${id}/approve`, token, {
     method: "POST",
+    body: JSON.stringify({ content: content ?? null }),
   });
 }
 
