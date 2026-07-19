@@ -2,19 +2,24 @@
 
 import { useCallback, useEffect, useState, type DragEvent } from "react";
 
+import { AiImportPanel, ContentForm } from "@/components/content-manager";
 import {
   adminCreateCategory,
   adminDeleteCategory,
+  adminDeleteContent,
   adminGetFolderTree,
+  adminListContent,
   adminReorderCategories,
   adminUpdateCategory,
   adminUpdateContent,
   getAccessToken,
+  type ContentSummary,
+  type ContentType,
   type FolderItem,
   type FolderNode,
 } from "@/lib/api";
 
-type Section = "knowledge" | "sql" | "interview" | "project";
+type Section = ContentType;
 
 const SECTION_TABS: { value: Section; label: string }[] = [
   { value: "knowledge", label: "八股" },
@@ -23,8 +28,8 @@ const SECTION_TABS: { value: Section; label: string }[] = [
   { value: "project", label: "项目" },
 ];
 
-// 是否支持把内容当"文件"放进文件夹（有 category_id 的板块）。
-const HAS_FILES: Record<Section, boolean> = {
+// 有分类（文件夹）的板块：内容可归到文件夹里。面经/项目没有分类，以文件列表呈现。
+const HAS_FOLDERS: Record<Section, boolean> = {
   knowledge: true,
   sql: true,
   interview: false,
@@ -44,9 +49,12 @@ interface DragPayload {
   id: number;
 }
 interface DropHint {
-  id: number | null; // null = 根区域
+  id: number | null;
   mode: DropMode;
 }
+type Dialog =
+  | { mode: "new"; presetCat: number | null }
+  | { mode: "edit"; editingId: number };
 
 function flatten(roots: FolderNode[]): { flats: Flat[]; files: Map<number, FolderItem[]> } {
   const flats: Flat[] = [];
@@ -95,7 +103,7 @@ function computeMove(
 ): Flat[] {
   if (dragId === targetId) return flats;
   const desc = descendants(flats, dragId);
-  if (targetId !== null && desc.has(targetId)) return flats; // 不能拖进自己的子孙
+  if (targetId !== null && desc.has(targetId)) return flats;
 
   const drag = flats.find((f) => f.id === dragId);
   if (!drag) return flats;
@@ -126,17 +134,25 @@ function computeMove(
 
   return [...others, movedDrag].map((f) => {
     if (orderOf.has(f.id)) {
-      return { ...f, parent_id: f.id === dragId ? newParent : f.parent_id, order: orderOf.get(f.id)! };
+      return {
+        ...f,
+        parent_id: f.id === dragId ? newParent : f.parent_id,
+        order: orderOf.get(f.id)!,
+      };
     }
     return f;
   });
 }
+
+const STATUS_BADGE = (status: string) =>
+  status === "published" ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600";
 
 export function FolderManager() {
   const [section, setSection] = useState<Section>("knowledge");
   const [flats, setFlats] = useState<Flat[]>([]);
   const [files, setFiles] = useState<Map<number, FolderItem[]>>(new Map());
   const [uncategorized, setUncategorized] = useState<FolderItem[]>([]);
+  const [flatFiles, setFlatFiles] = useState<ContentSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -147,19 +163,28 @@ export function FolderManager() {
 
   const [dragging, setDragging] = useState<DragPayload | null>(null);
   const [hint, setHint] = useState<DropHint | null>(null);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+
+  const withFolders = HAS_FOLDERS[section];
 
   const load = useCallback((s: Section) => {
     const token = getAccessToken();
     if (!token) return;
-    adminGetFolderTree(token, s)
-      .then((tree) => {
-        const { flats: fl, files: fm } = flatten(tree.roots);
-        setFlats(fl);
-        setFiles(fm);
-        setUncategorized(tree.uncategorized ?? []);
-        setExpanded(new Set(fl.map((f) => f.id)));
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+    if (HAS_FOLDERS[s]) {
+      adminGetFolderTree(token, s)
+        .then((tree) => {
+          const { flats: fl, files: fm } = flatten(tree.roots);
+          setFlats(fl);
+          setFiles(fm);
+          setUncategorized(tree.uncategorized ?? []);
+          setExpanded(new Set(fl.map((f) => f.id)));
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+    } else {
+      adminListContent(token, s)
+        .then(setFlatFiles)
+        .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+    }
   }, []);
 
   useEffect(() => {
@@ -187,7 +212,6 @@ export function FolderManager() {
   async function moveFile(fileId: number, catId: number | null) {
     const token = getAccessToken();
     if (!token) return;
-    // 本地乐观更新
     setFiles((prev) => {
       const next = new Map(prev);
       for (const [k, arr] of next) next.set(k, arr.filter((i) => i.id !== fileId));
@@ -258,6 +282,28 @@ export function FolderManager() {
     }
   }
 
+  // ---- 文件（内容）操作 ----
+  async function toggleFileStatus(id: number, status: string) {
+    const token = getAccessToken();
+    if (!token) return;
+    const next = status === "published" ? "draft" : "published";
+    await adminUpdateContent(token, section, id, { status: next });
+    load(section);
+  }
+
+  async function deleteFile(id: number) {
+    if (!window.confirm("确认删除该内容？此操作不可恢复。")) return;
+    const token = getAccessToken();
+    if (!token) return;
+    await adminDeleteContent(token, section, id);
+    load(section);
+  }
+
+  function closeDialogAndReload() {
+    setDialog(null);
+    load(section);
+  }
+
   // ---- 拖拽 ----
   function onFolderDragOver(e: DragEvent, targetId: number) {
     if (!dragging) return;
@@ -268,7 +314,8 @@ export function FolderManager() {
     }
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const mode: DropMode = y < rect.height * 0.3 ? "before" : y > rect.height * 0.7 ? "after" : "inside";
+    const mode: DropMode =
+      y < rect.height * 0.3 ? "before" : y > rect.height * 0.7 ? "after" : "inside";
     setHint({ id: targetId, mode });
   }
 
@@ -299,6 +346,47 @@ export function FolderManager() {
     persistFolders(computeMove(flats, payload.id, null, "inside"));
   }
 
+  function fileRow(
+    f: { id: number; title: string; status: string },
+    opts: { draggable: boolean; paddingLeft: number },
+  ) {
+    return (
+      <div
+        key={`file-${f.id}`}
+        draggable={opts.draggable}
+        onDragStart={opts.draggable ? () => setDragging({ kind: "file", id: f.id }) : undefined}
+        onDragEnd={opts.draggable ? () => setDragging(null) : undefined}
+        style={{ paddingLeft: `${opts.paddingLeft}px` }}
+        className={`group flex items-center gap-2 rounded py-1 pr-2 text-sm hover:bg-slate-50 ${
+          opts.draggable ? "cursor-grab" : ""
+        }`}
+      >
+        <span>📄</span>
+        <span className="flex-1 truncate text-slate-700">{f.title}</span>
+        <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_BADGE(f.status)}`}>
+          {f.status === "published" ? "已发布" : "草稿"}
+        </span>
+        <span className="ml-1 hidden shrink-0 gap-2 text-xs group-hover:flex">
+          <button
+            onClick={() => setDialog({ mode: "edit", editingId: f.id })}
+            className="text-brand-600 hover:underline"
+          >
+            编辑
+          </button>
+          <button
+            onClick={() => toggleFileStatus(f.id, f.status)}
+            className="text-slate-500 hover:underline"
+          >
+            {f.status === "published" ? "下架" : "上架"}
+          </button>
+          <button onClick={() => deleteFile(f.id)} className="text-red-500 hover:underline">
+            删除
+          </button>
+        </span>
+      </div>
+    );
+  }
+
   function renderFolder(node: Flat, depth: number) {
     const children = cm.get(node.id) ?? [];
     const nodeFiles = files.get(node.id) ?? [];
@@ -317,7 +405,9 @@ export function FolderManager() {
           onDrop={(e) => onFolderDrop(e, node.id)}
           style={{ paddingLeft: `${depth * 18 + 4}px` }}
           className={`group flex items-center gap-1 rounded py-1 pr-2 text-sm ${
-            hinted && hint?.mode === "inside" ? "bg-brand-100 ring-1 ring-brand-400" : "hover:bg-slate-50"
+            hinted && hint?.mode === "inside"
+              ? "bg-brand-100 ring-1 ring-brand-400"
+              : "hover:bg-slate-50"
           } ${hinted && hint?.mode === "before" ? "border-t-2 border-brand-500" : ""} ${
             hinted && hint?.mode === "after" ? "border-b-2 border-brand-500" : ""
           }`}
@@ -355,6 +445,15 @@ export function FolderManager() {
             </span>
           )}
           <span className="ml-auto hidden shrink-0 gap-2 text-xs group-hover:flex">
+            <button
+              onClick={() => {
+                setExpanded((p) => new Set(p).add(node.id));
+                setDialog({ mode: "new", presetCat: node.id });
+              }}
+              className="text-green-600 hover:underline"
+            >
+              ＋文件
+            </button>
             <button
               onClick={() => {
                 setAddingParent(node.id);
@@ -399,23 +498,7 @@ export function FolderManager() {
               </div>
             )}
             {children.map((c) => renderFolder(c, depth + 1))}
-            {HAS_FILES[section] &&
-              nodeFiles.map((f) => (
-                <div
-                  key={`file-${f.id}`}
-                  draggable
-                  onDragStart={() => setDragging({ kind: "file", id: f.id })}
-                  onDragEnd={() => setDragging(null)}
-                  style={{ paddingLeft: `${(depth + 1) * 18 + 24}px` }}
-                  className="flex cursor-grab items-center gap-2 py-0.5 text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  <span>📄</span>
-                  <span className="flex-1 truncate">{f.title}</span>
-                  {f.status !== "published" && (
-                    <span className="rounded bg-slate-200 px-1 text-xs text-slate-500">草稿</span>
-                  )}
-                </div>
-              ))}
+            {nodeFiles.map((f) => fileRow(f, { draggable: true, paddingLeft: (depth + 1) * 18 + 24 }))}
           </div>
         )}
       </div>
@@ -423,25 +506,38 @@ export function FolderManager() {
   }
 
   const roots = cm.get(null) ?? [];
+  const dialogTitle =
+    dialog?.mode === "edit" ? "编辑内容" : `添加${SECTION_TABS.find((t) => t.value === section)?.label}`;
 
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">目录管理（文件夹式）</h2>
-        <button
-          onClick={() => {
-            setAddingParent("root");
-            setAddName("");
-          }}
-          className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          + 新建顶层文件夹
-        </button>
+        <h2 className="text-lg font-semibold text-slate-900">目录管理</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setDialog({ mode: "new", presetCat: null })}
+            className="rounded-lg bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+          >
+            + 添加文件
+          </button>
+          {withFolders && (
+            <button
+              onClick={() => {
+                setAddingParent("root");
+                setAddName("");
+              }}
+              className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建顶层文件夹
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="mb-3 text-xs text-slate-500">
-        像管理文件夹一样：拖拽文件夹可移动/改变层级（拖到中间=放入其中，拖到上/下沿=同级排序）；
-        {HAS_FILES[section] ? "把内容（📄）拖进文件夹即归类；" : ""}双击名称可重命名。
+        {withFolders
+          ? "像管理文件夹一样：拖拽文件夹移动/改变层级（中间=放入其中，上/下沿=同级排序）；把内容（📄）拖进文件夹即归类；双击名称可重命名。悬停文件可编辑/下架/删除。"
+          : "该板块无需分类，直接以文件列表管理。「添加文件」可 AI 解析或手动录入；悬停文件可编辑/下架/删除。"}
       </p>
 
       <div className="mb-4 flex gap-2">
@@ -460,64 +556,115 @@ export function FolderManager() {
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        {/* 顶层拖放区 */}
-        <div
-          onDragOver={(e) => {
-            if (dragging) e.preventDefault();
-          }}
-          onDrop={onRootDrop}
-          className={`mb-1 rounded border border-dashed px-3 py-1.5 text-center text-xs ${
-            dragging ? "border-brand-400 bg-brand-50 text-brand-600" : "border-slate-200 text-slate-400"
-          }`}
-        >
-          拖到这里放到「顶层」
-        </div>
-
-        {addingParent === "root" && (
-          <div className="py-1 pl-6">
-            <input
-              autoFocus
-              value={addName}
-              onChange={(e) => setAddName(e.target.value)}
-              onBlur={() => addFolder(null)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addFolder(null);
-                if (e.key === "Escape") setAddingParent(null);
+      {withFolders ? (
+        <>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div
+              onDragOver={(e) => {
+                if (dragging) e.preventDefault();
               }}
-              placeholder="新顶层文件夹名称，回车确认"
-              className="w-56 rounded border border-brand-400 px-2 py-1 text-sm focus:outline-none"
-            />
-          </div>
-        )}
+              onDrop={onRootDrop}
+              className={`mb-1 rounded border border-dashed px-3 py-1.5 text-center text-xs ${
+                dragging
+                  ? "border-brand-400 bg-brand-50 text-brand-600"
+                  : "border-slate-200 text-slate-400"
+              }`}
+            >
+              拖到这里放到「顶层」
+            </div>
 
-        {roots.length === 0 && addingParent !== "root" ? (
-          <p className="py-4 text-center text-sm text-slate-400">
-            还没有文件夹，点右上角「+ 新建顶层文件夹」开始。
-          </p>
-        ) : (
-          roots.map((r) => renderFolder(r, 0))
-        )}
-      </div>
-
-      {HAS_FILES[section] && uncategorized.length > 0 && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
-          <p className="mb-2 text-sm font-medium text-amber-800">
-            未分类（{uncategorized.length}）— 拖进上面的文件夹即可归类
-          </p>
-          <div className="space-y-0.5">
-            {uncategorized.map((f) => (
-              <div
-                key={`unc-${f.id}`}
-                draggable
-                onDragStart={() => setDragging({ kind: "file", id: f.id })}
-                onDragEnd={() => setDragging(null)}
-                className="flex cursor-grab items-center gap-2 rounded px-2 py-0.5 text-sm text-slate-600 hover:bg-white"
-              >
-                <span>📄</span>
-                <span className="flex-1 truncate">{f.title}</span>
+            {addingParent === "root" && (
+              <div className="py-1 pl-6">
+                <input
+                  autoFocus
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  onBlur={() => addFolder(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addFolder(null);
+                    if (e.key === "Escape") setAddingParent(null);
+                  }}
+                  placeholder="新顶层文件夹名称，回车确认"
+                  className="w-56 rounded border border-brand-400 px-2 py-1 text-sm focus:outline-none"
+                />
               </div>
-            ))}
+            )}
+
+            {roots.length === 0 && addingParent !== "root" ? (
+              <p className="py-4 text-center text-sm text-slate-400">
+                还没有文件夹，点右上角「+ 新建顶层文件夹」开始。
+              </p>
+            ) : (
+              roots.map((r) => renderFolder(r, 0))
+            )}
+          </div>
+
+          {uncategorized.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+              <p className="mb-2 text-sm font-medium text-amber-800">
+                未分类（{uncategorized.length}）— 拖进上面的文件夹即可归类
+              </p>
+              <div className="space-y-0.5">
+                {uncategorized.map((f) => fileRow(f, { draggable: true, paddingLeft: 8 }))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          {flatFiles.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-400">
+              该板块暂无内容，点右上角「+ 添加文件」开始。
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {flatFiles.map((f) => fileRow(f, { draggable: false, paddingLeft: 8 }))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {dialog && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4">
+          <div className="my-8 w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">{dialogTitle}</h3>
+              <button
+                onClick={() => setDialog(null)}
+                className="text-sm text-slate-400 hover:text-slate-700"
+              >
+                ✕ 关闭
+              </button>
+            </div>
+
+            {dialog.mode === "new" ? (
+              <>
+                <AiImportPanel
+                  type={section}
+                  presetCategoryId={dialog.presetCat}
+                  onDone={closeDialogAndReload}
+                />
+                <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  或 手动新建单条
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+                <ContentForm
+                  type={section}
+                  editingId={null}
+                  presetCategoryId={dialog.presetCat}
+                  onSaved={closeDialogAndReload}
+                  onCancel={() => setDialog(null)}
+                />
+              </>
+            ) : (
+              <ContentForm
+                type={section}
+                editingId={dialog.editingId}
+                onSaved={closeDialogAndReload}
+                onCancel={() => setDialog(null)}
+              />
+            )}
           </div>
         </div>
       )}

@@ -1,20 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { MarkdownTextarea } from "@/components/markdown-textarea";
 import {
   adminCreateContent,
-  adminDeleteContent,
   adminGetContentDetail,
-  adminListContent,
   adminListCategories,
   adminUpdateContent,
   completeAnswer,
   getAccessToken,
   parseSubmission,
   type CategoryFlat,
-  type ContentSummary,
   type ContentType,
   type InterviewQAInput,
 } from "@/lib/api";
@@ -262,7 +259,15 @@ function emptyAiDraft(): AiDraft {
 }
 
 // 管理员 AI 解析：上传文件 / 粘贴文本 → 拆分为多条草稿 → 编辑后一键直接发布。
-function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void }) {
+export function AiImportPanel({
+  type,
+  onDone,
+  presetCategoryId,
+}: {
+  type: ContentType;
+  onDone: () => void;
+  presetCategoryId?: number | null;
+}) {
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -353,8 +358,9 @@ function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void
   }
 
   function draftToBody(d: AiDraft): Record<string, unknown> {
+    const cat = presetCategoryId != null ? { category_id: presetCategoryId } : {};
     if (type === "knowledge") {
-      return { title: d.title || "未命名", content_md: d.content_md, status: "published" };
+      return { title: d.title || "未命名", content_md: d.content_md, status: "published", ...cat };
     }
     if (type === "sql") {
       return {
@@ -363,6 +369,7 @@ function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void
         answer_md: d.answer_md,
         difficulty: d.difficulty,
         status: "published",
+        ...cat,
       };
     }
     if (type === "interview") {
@@ -580,84 +587,82 @@ function AiImportPanel({ type, onDone }: { type: ContentType; onDone: () => void
   );
 }
 
-export function ContentManager() {
-  const [type, setType] = useState<ContentType>("knowledge");
-  const [items, setItems] = useState<ContentSummary[]>([]);
-  const [editing, setEditing] = useState<number | "new" | null>(null);
-  const [values, setValues] = useState<FormValues>(emptyValues("knowledge"));
+// 单条内容的新建 / 编辑表单，供目录管理的弹窗复用。
+export function ContentForm({
+  type,
+  editingId,
+  presetCategoryId,
+  onSaved,
+  onCancel,
+}: {
+  type: ContentType;
+  editingId: number | null;
+  presetCategoryId?: number | null;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [values, setValues] = useState<FormValues>(emptyValues(type));
   const [qaItems, setQaItems] = useState<InterviewQAInput[]>([emptyQa()]);
   const [status, setStatus] = useState("published");
+  const [cats, setCats] = useState<CategoryFlat[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [cats, setCats] = useState<CategoryFlat[]>([]);
-
-  const load = useCallback((t: ContentType) => {
-    const token = getAccessToken();
-    if (!token) return;
-    adminListContent(token, t)
-      .then(setItems)
-      .catch((e) => setError(e.message));
-  }, []);
+  const [loading, setLoading] = useState(editingId != null);
 
   useEffect(() => {
-    load(type);
     const token = getAccessToken();
     if (token) {
       adminListCategories(token, type)
         .then(setCats)
         .catch(() => setCats([]));
     }
-  }, [type, load]);
+  }, [type]);
 
-  function switchType(t: ContentType) {
-    setType(t);
-    setEditing(null);
-    setError(null);
-  }
-
-  function openNew() {
-    setValues(emptyValues(type));
-    setQaItems([emptyQa()]);
-    setStatus("published");
-    setEditing("new");
-    setError(null);
-  }
-
-  async function openEdit(id: number) {
+  useEffect(() => {
     const token = getAccessToken();
     if (!token) return;
-    setError(null);
-    try {
-      const detail = await adminGetContentDetail(token, type, id);
+    if (editingId == null) {
       const v = emptyValues(type);
-      for (const f of FIELDS[type]) {
-        const raw = detail[f.name];
-        if (raw == null) continue;
-        v[f.name] = f.type === "checkbox" ? Boolean(raw) : String(raw);
+      if (presetCategoryId != null && (type === "knowledge" || type === "sql")) {
+        v.category_id = String(presetCategoryId);
       }
       setValues(v);
-      if (type === "interview") {
-        const qa = Array.isArray(detail.qa_items)
-          ? (detail.qa_items as Record<string, unknown>[])
-          : [];
-        setQaItems(
-          qa.length > 0
-            ? qa.map((q) => ({
-                section: (["round1", "round2", "round3", "hr"].includes(str(q.section))
-                  ? str(q.section)
-                  : "round1") as InterviewQAInput["section"],
-                question: str(q.question),
-                answer: str(q.answer),
-              }))
-            : [emptyQa()],
-        );
-      }
-      setStatus(String(detail.status ?? "published"));
-      setEditing(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      setQaItems([emptyQa()]);
+      setStatus("published");
+      setLoading(false);
+      return;
     }
-  }
+    setLoading(true);
+    adminGetContentDetail(token, type, editingId)
+      .then((detail) => {
+        const v = emptyValues(type);
+        for (const f of FIELDS[type]) {
+          const raw = detail[f.name];
+          if (raw == null) continue;
+          v[f.name] = f.type === "checkbox" ? Boolean(raw) : String(raw);
+        }
+        setValues(v);
+        if (type === "interview") {
+          const qa = Array.isArray(detail.qa_items)
+            ? (detail.qa_items as Record<string, unknown>[])
+            : [];
+          setQaItems(
+            qa.length > 0
+              ? qa.map((q) => ({
+                  section: (["round1", "round2", "round3", "hr"].includes(str(q.section))
+                    ? str(q.section)
+                    : "round1") as InterviewQAInput["section"],
+                  question: str(q.question),
+                  answer: str(q.answer),
+                }))
+              : [emptyQa()],
+          );
+        }
+        setStatus(String(detail.status ?? "published"));
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "加载失败"))
+      .finally(() => setLoading(false));
+  }, [type, editingId, presetCategoryId]);
 
   function buildBody(): Record<string, unknown> {
     const body: Record<string, unknown> = { status };
@@ -687,13 +692,12 @@ export function ContentManager() {
     setError(null);
     try {
       const body = buildBody();
-      if (editing === "new") {
+      if (editingId == null) {
         await adminCreateContent(token, type, body);
-      } else if (typeof editing === "number") {
-        await adminUpdateContent(token, type, editing, body);
+      } else {
+        await adminUpdateContent(token, type, editingId, body);
       }
-      setEditing(null);
-      load(type);
+      onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -701,182 +705,90 @@ export function ContentManager() {
     }
   }
 
-  async function toggleStatus(item: ContentSummary) {
-    const token = getAccessToken();
-    if (!token) return;
-    const next = item.status === "published" ? "draft" : "published";
-    await adminUpdateContent(token, type, item.id, { status: next });
-    load(type);
-  }
-
-  async function remove(id: number) {
-    const token = getAccessToken();
-    if (!token) return;
-    if (!window.confirm("确认删除该内容？此操作不可恢复。")) return;
-    await adminDeleteContent(token, type, id);
-    load(type);
-  }
+  if (loading) return <p className="text-sm text-slate-400">加载中…</p>;
 
   return (
-    <div className="mt-10">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">内容管理</h2>
-        <button
-          onClick={openNew}
-          className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          + 新建{TABS.find((t) => t.value === type)?.label}
-        </button>
-      </div>
-
-      <div className="mb-4 flex gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => switchType(t.value)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              type === t.value ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-
-      {editing === null && <AiImportPanel type={type} onDone={() => load(type)} />}
-
-      {editing !== null && (
-        <form onSubmit={submit} className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-700">
-            {editing === "new" ? "新建内容" : `编辑内容 #${editing}`}
-          </p>
-          {FIELDS[type].map((f) => (
-            <label key={f.name} className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-600">{f.label}</span>
-              {f.type === "textarea" ? (
-                <MarkdownTextarea
-                  value={values[f.name] as string}
-                  onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
-                  required={f.required}
-                  rows={5}
-                  className={inputCls}
-                />
-              ) : f.type === "checkbox" ? (
-                <input
-                  type="checkbox"
-                  checked={values[f.name] as boolean}
-                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.checked }))}
-                  className="h-4 w-4"
-                />
-              ) : f.type === "select" ? (
-                <select
-                  value={values[f.name] as string}
-                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
-                  className={inputCls}
-                >
-                  {f.options!.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              ) : f.type === "category" ? (
-                <select
-                  value={values[f.name] as string}
-                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
-                  className={inputCls}
-                >
-                  <option value="">（不分类）</option>
-                  {cats.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.parent_id ? "　└ " : ""}
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type={f.type === "number" ? "number" : "text"}
-                  value={values[f.name] as string}
-                  onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
-                  required={f.required}
-                  className={inputCls}
-                />
-              )}
-            </label>
-          ))}
-          {type === "interview" && (
-            <InterviewQaEditor items={qaItems} onChange={setQaItems} />
-          )}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-600">状态</span>
+    <form onSubmit={submit} className="space-y-3">
+      {FIELDS[type].map((f) => (
+        <label key={f.name} className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">{f.label}</span>
+          {f.type === "textarea" ? (
+            <MarkdownTextarea
+              value={values[f.name] as string}
+              onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
+              required={f.required}
+              rows={5}
+              className={inputCls}
+            />
+          ) : f.type === "checkbox" ? (
+            <input
+              type="checkbox"
+              checked={values[f.name] as boolean}
+              onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.checked }))}
+              className="h-4 w-4"
+            />
+          ) : f.type === "select" ? (
             <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              value={values[f.name] as string}
+              onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
               className={inputCls}
             >
-              <option value="published">已发布（上架）</option>
-              <option value="draft">草稿（下架）</option>
+              {f.options!.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
-          </label>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          ) : f.type === "category" ? (
+            <select
+              value={values[f.name] as string}
+              onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
+              className={inputCls}
             >
-              {busy ? "保存中…" : "保存"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
-            >
-              取消
-            </button>
-          </div>
-        </form>
-      )}
-
-      <div className="space-y-1">
-        {items.length === 0 ? (
-          <p className="text-sm text-slate-400">该板块暂无内容。</p>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <span className="flex items-center gap-2 truncate">
-                <span className="text-slate-800">{item.title}</span>
-                {item.subtitle && <span className="text-xs text-slate-400">{item.subtitle}</span>}
-                <span
-                  className={`rounded px-1.5 py-0.5 text-xs ${
-                    item.status === "published"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-slate-200 text-slate-600"
-                  }`}
-                >
-                  {item.status === "published" ? "已发布" : "草稿"}
-                </span>
-              </span>
-              <span className="flex shrink-0 gap-3">
-                <button onClick={() => openEdit(item.id)} className="text-xs text-brand-600 hover:underline">
-                  编辑
-                </button>
-                <button onClick={() => toggleStatus(item)} className="text-xs text-slate-500 hover:underline">
-                  {item.status === "published" ? "下架" : "上架"}
-                </button>
-                <button onClick={() => remove(item.id)} className="text-xs text-red-500 hover:underline">
-                  删除
-                </button>
-              </span>
-            </div>
-          ))
-        )}
+              <option value="">（不分类）</option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.parent_id ? "　└ " : ""}
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={f.type === "number" ? "number" : "text"}
+              value={values[f.name] as string}
+              onChange={(e) => setValues((s) => ({ ...s, [f.name]: e.target.value }))}
+              required={f.required}
+              className={inputCls}
+            />
+          )}
+        </label>
+      ))}
+      {type === "interview" && <InterviewQaEditor items={qaItems} onChange={setQaItems} />}
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-600">状态</span>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
+          <option value="published">已发布（上架）</option>
+          <option value="draft">草稿（下架）</option>
+        </select>
+      </label>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          {busy ? "保存中…" : "保存"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
+        >
+          取消
+        </button>
       </div>
-    </div>
+    </form>
   );
 }
