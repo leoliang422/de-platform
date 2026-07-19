@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ContentManager } from "@/components/content-manager";
 import { PageHeader, Prose } from "@/components/content";
 import { FolderManager } from "@/components/folder-manager";
 import { RequireAuth } from "@/components/guard";
@@ -102,11 +101,9 @@ function AdminInner() {
         </div>
       )}
 
-      <ContentManager />
+      <FolderManager />
 
       <UserManager />
-
-      <FolderManager />
     </div>
   );
 }
