@@ -183,7 +183,6 @@ function SubmitInner() {
   const [companyNames, setCompanyNames] = useState<string[]>([]);
   const [accessType, setAccessType] = useState<"free" | "paid">("free");
   const [implementation, setImplementation] = useState("");
-  const [priceCash, setPriceCash] = useState("");
   const [pricePoints, setPricePoints] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
@@ -433,7 +432,6 @@ function SubmitInner() {
       access_type: targetType === "project" ? accessType : undefined,
       implementation_md: targetType === "project" ? implementation : undefined,
       is_paid: targetType === "project" ? paid : undefined,
-      price_cash: targetType === "project" && paid ? priceCash || null : undefined,
       price_points:
         targetType === "project" && paid && pricePoints ? Number(pricePoints) : undefined,
       category_id: targetType === "knowledge" && categoryId ? Number(categoryId) : undefined,
@@ -825,18 +823,14 @@ function SubmitInner() {
                   className={inputCls}
                 >
                   <option value="free">免费</option>
-                  <option value="paid">付费</option>
+                  <option value="paid">积分解锁</option>
                 </select>
               </div>
             </div>
             {accessType === "paid" && (
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">现金价（元）</label>
-                  <input value={priceCash} onChange={(e) => setPriceCash(e.target.value)} className={inputCls} />
-                </div>
-                <div className="flex-1">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">积分价</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">解锁所需积分</label>
                   <input
                     value={pricePoints}
                     onChange={(e) => setPricePoints(e.target.value)}

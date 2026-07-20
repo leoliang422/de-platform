@@ -32,6 +32,15 @@ class InterviewCardOut(BaseModel):
     author_avatar: str | None = None
     rounds_covered: list[str] = []
     qa: list[InterviewQAOut] = []
+    # 模块级积分门控：locked=True 时 qa 被清空，需消耗免费名额或解锁模块后查看。
+    locked: bool = False
+
+
+class ModuleAccessInfo(BaseModel):
+    unlocked: bool = False
+    free_used: int = 0
+    free_limit: int = 0
+    unlock_points: int = 0
 
 
 class InterviewTypeGroup(BaseModel):
@@ -40,3 +49,10 @@ class InterviewTypeGroup(BaseModel):
     interview_type: str
     count: int
     posts: list[InterviewCardOut]
+
+
+class InterviewByTypeResponse(BaseModel):
+    """企业下按类型聚合的面经，附带当前用户的模块访问状态。"""
+
+    groups: list[InterviewTypeGroup]
+    access: ModuleAccessInfo

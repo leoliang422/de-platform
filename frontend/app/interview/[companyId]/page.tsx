@@ -1,20 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BackLink, Empty, ErrorText, Loading, Prose } from "@/components/content";
 import { ContentInteractions } from "@/components/interactions";
+import { ModuleUnlockPanel } from "@/components/unlock";
 import {
+  getAccessToken,
   getCompanyInterviewsByType,
   INTERVIEW_ROUND_LABEL,
   INTERVIEW_ROUND_ORDER,
   INTERVIEW_TYPE_LABEL,
   INTERVIEW_TYPE_ORDER,
+  revealInterview,
   type InterviewCard,
   type InterviewQA,
   type InterviewTypeGroup,
+  type ModuleAccessInfo,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function CompanyInterviewsPage({
   params,
@@ -22,23 +27,42 @@ export default function CompanyInterviewsPage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = use(params);
+  const { refreshUser } = useAuth();
   const [groups, setGroups] = useState<InterviewTypeGroup[]>([]);
+  const [access, setAccess] = useState<ModuleAccessInfo | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(
+    (keepActive = false) =>
+      getCompanyInterviewsByType(Number(companyId), getAccessToken())
+        .then((res) => {
+          setGroups(res.groups);
+          setAccess(res.access);
+          if (!keepActive) {
+            const firstNonEmpty = INTERVIEW_TYPE_ORDER.find(
+              (t) => (res.groups.find((x) => x.interview_type === t)?.count ?? 0) > 0,
+            );
+            setActive((prev) => prev ?? firstNonEmpty ?? null);
+          }
+        })
+        .catch(() => setError("无法加载面经"))
+        .finally(() => setLoading(false)),
+    [companyId],
+  );
+
   useEffect(() => {
-    getCompanyInterviewsByType(Number(companyId))
-      .then((g) => {
-        setGroups(g);
-        const firstNonEmpty = INTERVIEW_TYPE_ORDER.find(
-          (t) => (g.find((x) => x.interview_type === t)?.count ?? 0) > 0,
-        );
-        setActive(firstNonEmpty ?? null);
-      })
-      .catch(() => setError("无法加载面经"))
-      .finally(() => setLoading(false));
-  }, [companyId]);
+    load();
+  }, [load]);
+
+  async function onReveal(postId: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    await revealInterview(token, postId);
+    await refreshUser();
+    await load(true);
+  }
 
   const tabs = useMemo(
     () =>
@@ -78,14 +102,32 @@ export default function CompanyInterviewsPage({
             ))}
           </div>
 
-          {activeGroup && <Carousel key={activeGroup.interview_type} group={activeGroup} />}
+          {activeGroup && access && (
+            <Carousel
+              key={activeGroup.interview_type}
+              group={activeGroup}
+              access={access}
+              onReveal={onReveal}
+              onUnlocked={() => load(true)}
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function Carousel({ group }: { group: InterviewTypeGroup }) {
+function Carousel({
+  group,
+  access,
+  onReveal,
+  onUnlocked,
+}: {
+  group: InterviewTypeGroup;
+  access: ModuleAccessInfo;
+  onReveal: (postId: number) => Promise<void>;
+  onUnlocked: () => void;
+}) {
   const scroller = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const total = group.posts.length;
@@ -153,7 +195,12 @@ function Carousel({ group }: { group: InterviewTypeGroup }) {
             key={post.id}
             className="w-full shrink-0 snap-center sm:w-[640px] sm:max-w-[calc(100%-2rem)]"
           >
-            <InterviewCardView post={post} />
+            <InterviewCardView
+              post={post}
+              access={access}
+              onReveal={onReveal}
+              onUnlocked={onUnlocked}
+            />
           </div>
         ))}
       </div>
@@ -161,7 +208,20 @@ function Carousel({ group }: { group: InterviewTypeGroup }) {
   );
 }
 
-function InterviewCardView({ post }: { post: InterviewCard }) {
+function InterviewCardView({
+  post,
+  access,
+  onReveal,
+  onUnlocked,
+}: {
+  post: InterviewCard;
+  access: ModuleAccessInfo;
+  onReveal: (postId: number) => Promise<void>;
+  onUnlocked: () => void;
+}) {
+  const { user } = useAuth();
+  const [busy, setBusy] = useState(false);
+
   const byRound = useMemo(() => {
     const map = new Map<string, InterviewQA[]>();
     for (const qa of post.qa) {
@@ -174,27 +234,75 @@ function InterviewCardView({ post }: { post: InterviewCard }) {
     }));
   }, [post.qa]);
 
+  const quotaExhausted = !access.unlocked && access.free_used >= access.free_limit;
+
+  async function reveal() {
+    setBusy(true);
+    try {
+      await onReveal(post.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* 卡片头部：上传者信息（轮次不在此重复展示，改由下方每轮小标题标识） */}
       <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
         <AuthorLink post={post} />
       </div>
 
-      <div className="mt-3 space-y-4">
-        {byRound.map(({ round, items }) => (
-          <div key={round}>
-            <p className="mb-2 text-sm font-semibold text-brand-700">
-              {INTERVIEW_ROUND_LABEL[round] ?? round}
-            </p>
-            <div className="space-y-2">
-              {items.map((qa) => (
-                <QAItem key={qa.id} qa={qa} />
-              ))}
+      {post.locked ? (
+        <div className="mt-3">
+          {!user ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-800">
+              <Link href="/login" className="font-medium text-brand-600 hover:underline">
+                登录
+              </Link>
+              后可查看面经（每个模块免费 {access.free_limit} 篇）
             </div>
-          </div>
-        ))}
-      </div>
+          ) : quotaExhausted ? (
+            <ModuleUnlockPanel
+              module="interview"
+              freeUsed={access.free_used}
+              freeLimit={access.free_limit}
+              unlockPoints={access.unlock_points}
+              onUnlocked={onUnlocked}
+            />
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
+              <p className="text-sm text-slate-600">
+                本篇面经内容已隐藏
+                {post.rounds_covered.length > 0 &&
+                  `（含 ${post.rounds_covered
+                    .map((r) => INTERVIEW_ROUND_LABEL[r] ?? r)
+                    .join("、")}）`}
+              </p>
+              <button
+                onClick={reveal}
+                disabled={busy}
+                className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                查看这篇面经（免费剩 {Math.max(0, access.free_limit - access.free_used)} 篇）
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {byRound.map(({ round, items }) => (
+            <div key={round}>
+              <p className="mb-2 text-sm font-semibold text-brand-700">
+                {INTERVIEW_ROUND_LABEL[round] ?? round}
+              </p>
+              <div className="space-y-2">
+                {items.map((qa) => (
+                  <QAItem key={qa.id} qa={qa} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-auto">
         <ContentInteractions contentType="interview" contentId={post.id} />

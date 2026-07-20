@@ -20,4 +20,11 @@ class SqlQuestionListItem(BaseModel):
 
 class SqlQuestionDetail(SqlQuestionListItem):
     prompt_md: str
-    answer_md: str
+    # 题干始终可见；答案受模块级积分门控，未获授权时为 None。
+    answer_md: str | None = None
+    answer_locked: bool = False
+    # 访问状态（供前端展示"剩余免费名额 / 解锁模块"）。
+    module_unlocked: bool = False
+    free_used: int = 0
+    free_limit: int = 0
+    unlock_points: int = 0

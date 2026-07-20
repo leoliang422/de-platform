@@ -118,7 +118,8 @@ async def test_interview_by_company(client: AsyncClient, db: AsyncSession) -> No
 
     resp = await client.get(f"/companies/{company.id}/interviews-by-type")
     assert resp.status_code == 200
-    campus = next(g for g in resp.json() if g["interview_type"] == "campus")
+    groups = resp.json()["groups"]
+    campus = next(g for g in groups if g["interview_type"] == "campus")
     assert campus["posts"][0]["title"] == "数据开发一面"
 
 

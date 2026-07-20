@@ -51,9 +51,6 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
     { name: "title", label: "标题", type: "text", required: true },
     { name: "content_md", label: "正文（直接粘贴 Markdown）", type: "textarea", required: true },
     { name: "category_id", label: "分类（可选）", type: "category" },
-    { name: "is_paid", label: "付费内容", type: "checkbox" },
-    { name: "price_cash", label: "现金价（元，可选）", type: "text", nullable: true },
-    { name: "price_points", label: "积分价（可选）", type: "number" },
   ],
   sql: [
     { name: "title", label: "题目标题", type: "text", required: true },
@@ -105,11 +102,10 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
       type: "select",
       options: [
         { value: "free", label: "免费" },
-        { value: "paid", label: "付费" },
+        { value: "paid", label: "积分解锁" },
       ],
     },
-    { name: "price_cash", label: "现金价（元，可选）", type: "text", nullable: true },
-    { name: "price_points", label: "积分价（可选）", type: "number" },
+    { name: "price_points", label: "解锁所需积分（access_type=积分解锁时生效）", type: "number" },
   ],
 };
 

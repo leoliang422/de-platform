@@ -14,8 +14,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-# 可付费解锁的内容类型（见 docs/points-and-payment.md）。
-PAYABLE_TYPES = ("project", "knowledge")
+# 可付费解锁的内容类型：仅项目（八股已全部免费；SQL/面经改用模块级积分门控）。
+PAYABLE_TYPES = ("project",)
 ORDER_STATUSES = ("pending", "paid", "failed")
 ENTITLEMENT_SOURCES = ("purchase", "points")
 

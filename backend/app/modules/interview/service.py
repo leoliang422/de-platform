@@ -89,19 +89,20 @@ def _rounds_covered(post: InterviewPost) -> list[str]:
     return [sec for sec in ROUND_SECTIONS if sec in seen]
 
 
-def _to_card(post: InterviewPost, author: User | None) -> InterviewCardOut:
+def _to_card(post: InterviewPost, author: User | None, locked: bool = False) -> InterviewCardOut:
     ordered = sorted(post.qa, key=lambda q: (_ROUND_ORDER.get(q.section, 99), q.order_index, q.id))
     return InterviewCardOut(
         id=post.id,
         company_id=post.company_id,
         title=post.title,
         interview_type=post.interview_type,
-        content_md=post.content_md,
+        content_md="" if locked else post.content_md,
         author_id=post.author_id,
         author_nickname=author.nickname if author else "匿名用户",
         author_avatar=author.avatar_url if author else None,
         rounds_covered=_rounds_covered(post),
-        qa=[InterviewQAOut.model_validate(q) for q in ordered],
+        qa=[] if locked else [InterviewQAOut.model_validate(q) for q in ordered],
+        locked=locked,
     )
 
 
@@ -114,13 +115,19 @@ async def _authors_map(db: AsyncSession, posts: list[InterviewPost]) -> dict[int
 
 
 async def list_cards_by_type(
-    db: AsyncSession, posts: list[InterviewPost]
+    db: AsyncSession, posts: list[InterviewPost], user: User | None = None
 ) -> list[InterviewTypeGroup]:
+    from app.modules.access.service import AccessService
+
+    access = AccessService(db)
     authors = await _authors_map(db, posts)
     groups: OrderedDict[str, list[InterviewCardOut]] = OrderedDict((t, []) for t in INTERVIEW_TYPES)
     other: list[InterviewCardOut] = []
     for post in posts:
-        card = _to_card(post, authors.get(post.author_id) if post.author_id else None)
+        # 只读判断（不消耗免费名额）：锁定的卡片隐藏问答，前端点击"查看"时再消耗。
+        visible = await access.can_view(user, "interview", post.id, post.author_id)
+        author = authors.get(post.author_id) if post.author_id else None
+        card = _to_card(post, author, locked=not visible)
         key = post.interview_type if post.interview_type in INTERVIEW_TYPES else None
         if key is None:
             other.append(card)
@@ -135,9 +142,11 @@ async def list_cards_by_type(
     return result
 
 
-async def to_card_detail(db: AsyncSession, post: InterviewPost) -> InterviewCardOut:
+async def to_card_detail(
+    db: AsyncSession, post: InterviewPost, locked: bool = False
+) -> InterviewCardOut:
     author = await db.get(User, post.author_id) if post.author_id else None
-    return _to_card(post, author)
+    return _to_card(post, author, locked=locked)
 
 
 async def update(db: AsyncSession, post_id: int, fields: dict[str, Any]) -> InterviewPost:

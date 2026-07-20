@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # 选 wechat/alipay 但凭证未配齐时，工厂会自动回退到 mock（见 payment/provider.py）。
     payment_provider: str = "mock"
 
+    # ---- 积分化访问控制（SQL / 面经 模块级）----
+    # 每个模块（sql / interview）每个用户可免费查看的条目数，超出后需一次性用积分解锁整个模块。
+    free_module_quota: int = 10
+    # 一次性解锁整个 SQL / 面经 模块所需积分（可按运营调整）。
+    sql_module_unlock_points: int = 50
+    interview_module_unlock_points: int = 50
+
     # ---- 微信支付（v3 Native）占位配置；获取方式见 docs/deployment.md ----
     wechat_app_id: str = ""
     wechat_mch_id: str = ""

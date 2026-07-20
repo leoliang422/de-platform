@@ -4,7 +4,6 @@ import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
 import { AnnotatedReader, ContentInteractions } from "@/components/interactions";
-import { UnlockPanel } from "@/components/unlock";
 import { getAccessToken, getKnowledgeDetail, type KnowledgeDetail } from "@/lib/api";
 
 export default function KnowledgeDetailPage({
@@ -34,19 +33,9 @@ export default function KnowledgeDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <AnnotatedReader contentType="knowledge" contentId={item.id} disabled={item.locked}>
+        <AnnotatedReader contentType="knowledge" contentId={item.id}>
           <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
-          {item.locked ? (
-            <UnlockPanel
-              contentType="knowledge"
-              contentId={item.id}
-              priceCash={item.price_cash}
-              pricePoints={item.price_points}
-              onUnlocked={load}
-            />
-          ) : (
-            <Prose>{item.content_md ?? ""}</Prose>
-          )}
+          <Prose>{item.content_md ?? ""}</Prose>
           <ContentInteractions contentType="knowledge" contentId={item.id} />
         </AnnotatedReader>
       )}

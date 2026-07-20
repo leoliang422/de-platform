@@ -135,10 +135,11 @@ async def test_double_unlock_is_idempotent(client: AsyncClient, db: AsyncSession
     assert second.json()["balance"] == 400  # 未二次扣分
 
 
-async def test_paid_knowledge_locked_until_unlock(client: AsyncClient, db: AsyncSession) -> None:
+async def test_knowledge_is_free_and_not_payable(client: AsyncClient, db: AsyncSession) -> None:
+    # 即便历史数据标了 is_paid，八股也一律免费开放。
     item = KnowledgeItem(
-        title="付费知识",
-        content_md="paid body",
+        title="历史付费知识",
+        content_md="body",
         is_paid=True,
         price_cash=Decimal("9.90"),
         price_points=100,
@@ -149,21 +150,18 @@ async def test_paid_knowledge_locked_until_unlock(client: AsyncClient, db: Async
     await db.refresh(item)
 
     resp = await client.get(f"/knowledge/{item.id}")
-    assert resp.json()["locked"] is True
-    assert resp.json()["content_md"] is None
+    assert resp.json()["locked"] is False
+    assert resp.json()["content_md"] == "body"
 
     token = await _register_and_login(client, "kbuyer@test.io")
     await _set_points(db, "kbuyer@test.io", 500)
+    # 八股不再可解锁：payment/unlock 拒绝 knowledge。
     resp = await client.post(
         "/payment/unlock",
         headers=_auth(token),
         json={"content_type": "knowledge", "content_id": item.id, "method": "points"},
     )
-    assert resp.status_code == 200, resp.text
-
-    resp = await client.get(f"/knowledge/{item.id}", headers=_auth(token))
-    assert resp.json()["locked"] is False
-    assert resp.json()["content_md"] == "paid body"
+    assert resp.status_code == 400
 
 
 async def test_entitlements_me(client: AsyncClient, db: AsyncSession) -> None:

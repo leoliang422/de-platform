@@ -577,7 +577,12 @@ export interface SqlListItem {
 
 export interface SqlDetail extends SqlListItem {
   prompt_md: string;
-  answer_md: string;
+  answer_md: string | null;
+  answer_locked: boolean;
+  module_unlocked: boolean;
+  free_used: number;
+  free_limit: number;
+  unlock_points: number;
 }
 
 export function getSqlList(categoryId?: number): Promise<SqlListItem[]> {
@@ -585,8 +590,12 @@ export function getSqlList(categoryId?: number): Promise<SqlListItem[]> {
   return request<SqlListItem[]>(`/sql-questions${q}`);
 }
 
-export function getSqlDetail(id: number): Promise<SqlDetail> {
-  return request<SqlDetail>(`/sql-questions/${id}`);
+export function getSqlDetail(id: number, token?: string | null): Promise<SqlDetail> {
+  return request<SqlDetail>(`/sql-questions/${id}`, maybeAuth(token));
+}
+
+export function revealSqlAnswer(token: string, id: number): Promise<SqlDetail> {
+  return authRequest<SqlDetail>(`/sql-questions/${id}/reveal`, token, { method: "POST" });
 }
 
 // ---- Interview ----
@@ -615,12 +624,25 @@ export interface InterviewCard {
   author_avatar: string | null;
   rounds_covered: string[];
   qa: InterviewQA[];
+  locked: boolean;
 }
 
 export interface InterviewTypeGroup {
   interview_type: string;
   count: number;
   posts: InterviewCard[];
+}
+
+export interface ModuleAccessInfo {
+  unlocked: boolean;
+  free_used: number;
+  free_limit: number;
+  unlock_points: number;
+}
+
+export interface InterviewByTypeResponse {
+  groups: InterviewTypeGroup[];
+  access: ModuleAccessInfo;
 }
 
 export const INTERVIEW_TYPE_LABEL: Record<string, string> = {
@@ -647,12 +669,46 @@ export function getCompanies(): Promise<Company[]> {
   return request<Company[]>("/companies");
 }
 
-export function getCompanyInterviewsByType(companyId: number): Promise<InterviewTypeGroup[]> {
-  return request<InterviewTypeGroup[]>(`/companies/${companyId}/interviews-by-type`);
+export function getCompanyInterviewsByType(
+  companyId: number,
+  token?: string | null,
+): Promise<InterviewByTypeResponse> {
+  return request<InterviewByTypeResponse>(
+    `/companies/${companyId}/interviews-by-type`,
+    maybeAuth(token),
+  );
 }
 
-export function getInterviewDetail(id: number): Promise<InterviewCard> {
-  return request<InterviewCard>(`/interviews/${id}`);
+export function getInterviewDetail(id: number, token?: string | null): Promise<InterviewCard> {
+  return request<InterviewCard>(`/interviews/${id}`, maybeAuth(token));
+}
+
+export function revealInterview(token: string, id: number): Promise<InterviewCard> {
+  return authRequest<InterviewCard>(`/interviews/${id}/reveal`, token, { method: "POST" });
+}
+
+// ---- 模块级积分访问（sql / interview） ----
+export type AccessModule = "sql" | "interview";
+
+export interface ModuleAccess {
+  module: string;
+  unlocked: boolean;
+  free_used: number;
+  free_limit: number;
+  unlock_points: number;
+}
+
+export interface ModuleUnlockResult extends ModuleAccess {
+  balance: number;
+  already: boolean;
+}
+
+export function getModuleAccess(module: AccessModule, token?: string | null): Promise<ModuleAccess> {
+  return request<ModuleAccess>(`/access/${module}`, maybeAuth(token));
+}
+
+export function unlockModule(token: string, module: AccessModule): Promise<ModuleUnlockResult> {
+  return authRequest<ModuleUnlockResult>(`/access/${module}/unlock`, token, { method: "POST" });
 }
 
 // ---- 管理端面经目录（公司=文件夹，类型=子文件夹，面经=文件） ----
@@ -937,8 +993,9 @@ export function adminUpdateUser(
 }
 
 // ---- Payment / Entitlements ----
-export type PayableType = "project" | "knowledge";
-export type UnlockMethod = "cash" | "points";
+// 仅项目采用单条积分解锁（八股免费；SQL/面经为模块级积分门控）。
+export type PayableType = "project";
+export type UnlockMethod = "points";
 
 export interface Entitlement {
   id: number;

@@ -147,9 +147,13 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     assert "字节跳动" in companies
     company_id = companies["字节跳动"]
 
-    # 按类型聚合，每篇为一次完整面试（卡片）
-    groups = (await client.get(f"/companies/{company_id}/interviews-by-type")).json()
-    campus = next(g for g in groups if g["interview_type"] == "campus")
+    # 按类型聚合，每篇为一次完整面试（卡片）。以作者身份查看（作者对自己内容始终可见）。
+    by_type = (
+        await client.get(
+            f"/companies/{company_id}/interviews-by-type", headers=_auth(user_token)
+        )
+    ).json()
+    campus = next(g for g in by_type["groups"] if g["interview_type"] == "campus")
     assert campus["count"] == 1
     card = campus["posts"][0]
     # 面经已去掉标题：内部标题回落为企业名
@@ -159,7 +163,7 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     assert len(card["qa"]) == 2
 
     # 单卡详情
-    detail = (await client.get(f"/interviews/{card['id']}")).json()
+    detail = (await client.get(f"/interviews/{card['id']}", headers=_auth(user_token))).json()
     assert detail["interview_type"] == "campus"
     assert detail["qa"][0]["question"] == "什么是数据倾斜？"
 
