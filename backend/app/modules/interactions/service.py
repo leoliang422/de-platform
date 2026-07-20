@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.interactions.models import (
     CONTENT_TYPES,
     REACTION_KINDS,
+    Annotation,
     Comment,
     ContentView,
     Reaction,
 )
 from app.modules.interactions.schemas import (
+    AnnotationOut,
     CommentOut,
     FavoriteItem,
     StatsOut,
@@ -241,6 +243,99 @@ class InteractionService:
         if user.role != "admin" and comment.user_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除")
         await self.db.delete(comment)
+        await self.db.commit()
+
+    # ---- 划词批注（无需审核、全员可见、可回复/删除） ----
+
+    async def list_annotations(self, ct: str, cid: int) -> list[AnnotationOut]:
+        _validate_type(ct)
+        stmt = (
+            select(Annotation, User)
+            .join(User, User.id == Annotation.user_id)
+            .where(Annotation.content_type == ct, Annotation.content_id == cid)
+            .order_by(Annotation.id.asc())
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return [
+            AnnotationOut(
+                id=a.id,
+                user_id=a.user_id,
+                author_nickname=u.nickname,
+                author_avatar=u.avatar_url,
+                parent_id=a.parent_id,
+                quote=a.quote or "",
+                anchor_offset=a.anchor_offset or 0,
+                body=a.body,
+                created_at=a.created_at,
+            )
+            for a, u in rows
+        ]
+
+    async def create_annotation(
+        self,
+        user: User,
+        ct: str,
+        cid: int,
+        body: str,
+        parent_id: int | None,
+        quote: str = "",
+        anchor_offset: int = 0,
+    ) -> Annotation:
+        _validate_type(ct)
+        parent: Annotation | None = None
+        if parent_id is not None:
+            parent = await self.db.get(Annotation, parent_id)
+            if parent is None or parent.content_type != ct or parent.content_id != cid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="回复的批注不存在"
+                )
+        annotation = Annotation(
+            user_id=user.id,
+            content_type=ct,
+            content_id=cid,
+            parent_id=parent_id,
+            quote=quote if parent_id is None else "",
+            anchor_offset=anchor_offset if parent_id is None else 0,
+            body=body,
+        )
+        self.db.add(annotation)
+        await self.db.flush()
+
+        notifier = NotificationService(self.db)
+        link = _link_for(ct, cid)
+        notified: set[int] = {user.id}
+
+        if parent is not None and parent.user_id not in notified:
+            await notifier.notify(
+                user_id=parent.user_id,
+                type="comment",
+                title="收到批注回复",
+                body=f"{user.nickname} 回复了你的批注：{body[:50]}",
+                link=link,
+            )
+            notified.add(parent.user_id)
+
+        owner_id = await self._owner_of(ct, cid)
+        if owner_id is not None and owner_id not in notified:
+            await notifier.notify(
+                user_id=owner_id,
+                type="comment",
+                title="有人批注了你的内容",
+                body=f"{user.nickname} 批注：{body[:50]}",
+                link=link,
+            )
+
+        await self.db.commit()
+        await self.db.refresh(annotation)
+        return annotation
+
+    async def delete_annotation(self, user: User, annotation_id: int) -> None:
+        annotation = await self.db.get(Annotation, annotation_id)
+        if annotation is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="批注不存在")
+        if user.role != "admin" and annotation.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除")
+        await self.db.delete(annotation)
         await self.db.commit()
 
     async def _title_for(self, ct: str, cid: int) -> str | None:

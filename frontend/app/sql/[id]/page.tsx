@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { ContentInteractions } from "@/components/interactions";
+import { AnnotatedReader, ContentInteractions } from "@/components/interactions";
 import { getSqlDetail, type SqlDetail } from "@/lib/api";
 
 export default function SqlDetailPage({
@@ -30,7 +30,7 @@ export default function SqlDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <>
+        <AnnotatedReader contentType="sql" contentId={item.id}>
           <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
           <h2 className="mb-2 text-sm font-semibold text-slate-500">题目</h2>
           <Prose>{item.prompt_md}</Prose>
@@ -47,7 +47,7 @@ export default function SqlDetailPage({
             </>
           )}
           <ContentInteractions contentType="sql" contentId={item.id} />
-        </>
+        </AnnotatedReader>
       )}
     </div>
   );

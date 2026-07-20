@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { ContentInteractions } from "@/components/interactions";
+import { AnnotatedReader, ContentInteractions } from "@/components/interactions";
 import { UnlockPanel } from "@/components/unlock";
 import { getAccessToken, getProjectDetail, type ProjectDetail } from "@/lib/api";
 
@@ -34,7 +34,7 @@ export default function ProjectDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <>
+        <AnnotatedReader contentType="project" contentId={item.id} disabled={item.locked}>
           <div className="mb-4 flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{item.title}</h1>
             <span
@@ -84,7 +84,7 @@ export default function ProjectDetailPage({
             </>
           )}
           <ContentInteractions contentType="project" contentId={item.id} />
-        </>
+        </AnnotatedReader>
       )}
     </div>
   );

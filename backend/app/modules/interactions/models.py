@@ -59,6 +59,32 @@ class Comment(Base):
     )
 
 
+class Annotation(Base):
+    """划词批注：选中正文某段文字后附加的笔记；全员可见、无需审核。
+
+    ``quote`` 保存被选中的文字，``anchor_offset`` 为其在正文纯文本中的起始字符偏移，
+    用于在阅读端定位并高亮。``parent_id`` 非空表示对某条批注的回复。
+    """
+
+    __tablename__ = "annotations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    content_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("annotations.id", ondelete="CASCADE"), nullable=True
+    )
+    quote: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    anchor_offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
 class ContentView(Base):
     """内容浏览量计数（每种内容一行）。"""
 

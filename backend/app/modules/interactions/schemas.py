@@ -38,3 +38,22 @@ class FavoriteItem(BaseModel):
     content_id: int
     title: str
     created_at: dt.datetime
+
+
+class AnnotationOut(BaseModel):
+    id: int
+    user_id: int
+    author_nickname: str
+    author_avatar: str | None = None
+    parent_id: int | None = None
+    quote: str = ""
+    anchor_offset: int = 0
+    body: str
+    created_at: dt.datetime
+
+
+class AnnotationCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+    parent_id: int | None = None
+    quote: str = Field(default="", max_length=2000)
+    anchor_offset: int = Field(default=0, ge=0)
