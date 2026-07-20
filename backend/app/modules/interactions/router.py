@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, get_current_user_optional
 from app.modules.interactions.schemas import (
+    AnnotationCreate,
+    AnnotationOut,
     CommentCreate,
     CommentOut,
     FavoriteItem,
@@ -111,3 +113,47 @@ async def delete_comment(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await InteractionService(db).delete_comment(current_user, comment_id)
+
+
+@router.get("/{content_type}/{content_id}/annotations", response_model=list[AnnotationOut])
+async def list_annotations(
+    content_type: str,
+    content_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> list[AnnotationOut]:
+    return await InteractionService(db).list_annotations(content_type, content_id)
+
+
+@router.post(
+    "/{content_type}/{content_id}/annotations",
+    response_model=AnnotationOut,
+    status_code=201,
+)
+async def create_annotation(
+    content_type: str,
+    content_id: int,
+    data: AnnotationCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AnnotationOut:
+    annotation = await InteractionService(db).create_annotation(
+        current_user, content_type, content_id, data.body, data.parent_id
+    )
+    return AnnotationOut(
+        id=annotation.id,
+        user_id=annotation.user_id,
+        author_nickname=current_user.nickname,
+        author_avatar=current_user.avatar_url,
+        parent_id=annotation.parent_id,
+        body=annotation.body,
+        created_at=annotation.created_at,
+    )
+
+
+@router.delete("/annotations/{annotation_id}", status_code=204)
+async def delete_annotation(
+    annotation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await InteractionService(db).delete_annotation(current_user, annotation_id)

@@ -53,7 +53,19 @@ function renderInline(text: string, kp: string): ReactNode[] {
   return out;
 }
 
-// 轻量 Markdown 渲染：标题 / 列表 / 代码块 / 图片 / 段落，无第三方依赖。
+function splitTableRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const s = line.trim();
+  return s.includes("-") && s.includes("|") && /^[\s|:-]+$/.test(s);
+}
+
+// 轻量 Markdown 渲染：标题 / 列表 / 表格 / 代码块 / 图片 / 段落，无第三方依赖。
 function renderMarkdown(md: string): ReactNode[] {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
@@ -164,6 +176,49 @@ function renderMarkdown(md: string): ReactNode[] {
             <li key={idx}>{renderInline(it, `ol-${k}-${idx}`)}</li>
           ))}
         </ol>,
+      );
+      continue;
+    }
+
+    // 表格（GFM 管道语法）：表头行 + 分隔行(---) + 若干数据行
+    if (line.includes("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      flushPara();
+      const header = splitTableRow(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
+        rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      const k = key++;
+      blocks.push(
+        <div key={`tbl-${k}`} className="my-2 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {header.map((h, ci) => (
+                  <th
+                    key={ci}
+                    className="border border-slate-300 bg-slate-100 px-3 py-1.5 text-left font-semibold"
+                  >
+                    {renderInline(h, `th-${k}-${ci}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {header.map((_, ci) => (
+                    <td key={ci} className="border border-slate-300 px-3 py-1.5 align-top">
+                      {renderInline(r[ci] ?? "", `td-${k}-${ri}-${ci}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
       );
       continue;
     }

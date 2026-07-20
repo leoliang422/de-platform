@@ -54,9 +54,12 @@ async def test_knowledge_submission_review_and_points(
     )
     assert resp.status_code == 201, resp.text
     sub = resp.json()
-    assert sub["status"] == "pending_review"  # MockLLM 同步加工完成
-    assert sub["processed_md"]
     sub_id = sub["id"]
+    # 加工放到后台任务：POST 立即返回 processing，随后我的投稿列表可见 pending_review。
+    mine = (await client.get("/submissions/me", headers=_auth(user_token))).json()
+    processed = next(s for s in mine if s["id"] == sub_id)
+    assert processed["status"] == "pending_review"
+    assert processed["processed_md"]
 
     admin_token = await _register_and_login(client, "boss@test.io")
     await _promote_admin(db, "boss@test.io")

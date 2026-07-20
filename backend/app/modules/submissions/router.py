@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,13 +29,26 @@ from app.modules.users.models import User
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
 
+async def _process_submission_bg(submission_id: int) -> None:
+    """后台加工投稿：用独立 DB session，避免占用已返回的请求 session。"""
+    # 延迟导入，便于测试用例替换 SessionLocal 指向测试库。
+    from app.core.database import SessionLocal
+
+    async with SessionLocal() as session:
+        await SubmissionService(session).dispatch(submission_id)
+
+
 @router.post("", response_model=SubmissionOut, status_code=status.HTTP_201_CREATED)
 async def create_submission(
     data: SubmissionCreate,
+    background: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubmissionOut:
-    submission = await SubmissionService(db).create(current_user.id, data)
+    # 先落库并立即返回（状态 processing），大模型加工放到响应之后的后台任务，
+    # 避免同步等待导致的请求超时（免费实例上表现为“上传失败”）。
+    submission = await SubmissionService(db).create(current_user.id, data, dispatch=False)
+    background.add_task(_process_submission_bg, submission.id)
     return SubmissionOut.model_validate(submission)
 
 

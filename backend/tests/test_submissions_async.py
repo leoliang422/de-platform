@@ -115,8 +115,10 @@ async def test_enqueue_failure_falls_back_to_sync(
             },
         )
         assert resp.status_code == 201, resp.text
-        # 入队失败自动回退同步加工，投稿不会卡在 processing。
-        assert resp.json()["status"] == "pending_review"
+        # 入队失败自动回退同步加工（在后台任务内完成），投稿不会卡在 processing。
+        sub_id = resp.json()["id"]
+        mine = (await client.get("/submissions/me", headers=_auth(token))).json()
+        assert next(s for s in mine if s["id"] == sub_id)["status"] == "pending_review"
     finally:
         get_settings.cache_clear()
 

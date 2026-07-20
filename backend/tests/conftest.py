@@ -51,9 +51,15 @@ async def client(session_factory) -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    # 让后台任务（投稿加工）用测试库的 session 工厂，而非导入期的内存库实例。
+    import app.core.database as db_mod
+
+    original_session_local = db_mod.SessionLocal
+    db_mod.SessionLocal = session_factory
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+    db_mod.SessionLocal = original_session_local
     app.dependency_overrides.clear()
 
 

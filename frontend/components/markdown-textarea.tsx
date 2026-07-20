@@ -13,6 +13,7 @@ interface Props {
   placeholder?: string;
   className?: string;
   hint?: boolean;
+  toolbar?: boolean;
 }
 
 const IMG_MD_RE = /!\[[^\]]*\]\([^)\s]+\)/;
@@ -48,6 +49,7 @@ export function MarkdownTextarea({
   placeholder,
   className,
   hint = true,
+  toolbar = true,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -69,6 +71,61 @@ export function MarkdownTextarea({
       el.setSelectionRange(pos, pos);
     });
   }
+
+  // 用标记包裹选区（无选区则插入占位文字并选中之，方便直接替换）。
+  function wrapSelection(before: string, after: string, placeholder: string) {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? value.length;
+    const selected = value.slice(start, end) || placeholder;
+    onChange(value.slice(0, start) + before + selected + after + value.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  }
+
+  // 给选区涉及的每一行加前缀（标题/列表/引用）。ordered=true 时用递增序号。
+  function prefixLines(prefix: string, ordered = false) {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const seg = value.slice(lineStart, end) || "";
+    const prefixed = seg
+      .split("\n")
+      .map((l, idx) => (ordered ? `${idx + 1}. ` : prefix) + l)
+      .join("\n");
+    onChange(value.slice(0, lineStart) + prefixed + value.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(lineStart, lineStart + prefixed.length);
+    });
+  }
+
+  const TOOLBAR: { label: string; title: string; run: () => void }[] = [
+    { label: "加粗", title: "加粗", run: () => wrapSelection("**", "**", "加粗文字") },
+    { label: "斜体", title: "斜体", run: () => wrapSelection("*", "*", "斜体文字") },
+    { label: "标题", title: "二级标题", run: () => prefixLines("## ") },
+    { label: "列表", title: "无序列表", run: () => prefixLines("- ") },
+    { label: "有序", title: "有序列表", run: () => prefixLines("", true) },
+    { label: "引用", title: "引用", run: () => prefixLines("> ") },
+    { label: "代码", title: "行内代码", run: () => wrapSelection("`", "`", "code") },
+    {
+      label: "代码块",
+      title: "代码块",
+      run: () => insertAtCursor("\n```\n在此粘贴代码\n```\n"),
+    },
+    {
+      label: "表格",
+      title: "插入表格",
+      run: () =>
+        insertAtCursor("\n| 列1 | 列2 |\n| --- | --- |\n| 内容 | 内容 |\n| 内容 | 内容 |\n"),
+    },
+    { label: "链接", title: "插入链接", run: () => wrapSelection("[", "](https://)", "链接文字") },
+  ];
 
   async function uploadAndInsert(files: File[]) {
     const token = getAccessToken();
@@ -110,6 +167,22 @@ export function MarkdownTextarea({
 
   return (
     <div>
+      {toolbar && (
+        <div className="mb-1 flex flex-wrap gap-1">
+          {TOOLBAR.map((btn) => (
+            <button
+              key={btn.label}
+              type="button"
+              title={btn.title}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={btn.run}
+              className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         value={value}

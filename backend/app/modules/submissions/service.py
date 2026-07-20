@@ -54,7 +54,9 @@ class SubmissionService:
         self.repo = SubmissionRepository(db)
         self.llm = llm or get_llm_client()
 
-    async def create(self, user_id: int, data: SubmissionCreate) -> Submission:
+    async def create(
+        self, user_id: int, data: SubmissionCreate, *, dispatch: bool = True
+    ) -> Submission:
         self._validate(data)
         submission = Submission(
             user_id=user_id,
@@ -68,8 +70,11 @@ class SubmissionService:
         await self.db.commit()
         await self.db.refresh(submission)
 
-        await self._dispatch(submission.id)
-        await self.db.refresh(submission)
+        # dispatch=False：仅落库返回，加工交由调用方在后台进行，避免阻塞 HTTP 响应
+        # （同步加工大模型可能耗时十几秒，在免费实例上会触发请求超时→前端“上传失败”）。
+        if dispatch:
+            await self.dispatch(submission.id)
+            await self.db.refresh(submission)
         return submission
 
     def _validate(self, data: SubmissionCreate) -> None:
@@ -87,7 +92,7 @@ class SubmissionService:
         if data.target_type == "sql":
             _require(bool(data.prompt_md), "SQL 投稿需填写题目")
 
-    async def _dispatch(self, submission_id: int) -> None:
+    async def dispatch(self, submission_id: int) -> None:
         """按配置把加工投递到异步队列；队列不可用时安全回退到同步加工。"""
         if get_settings().task_queue_enabled:
             try:
@@ -147,7 +152,7 @@ class SubmissionService:
         submission.status = "processing"
         submission.reject_reason = None
         await self.db.commit()
-        await self._dispatch(submission_id)
+        await self.dispatch(submission_id)
         await self.db.refresh(submission)
         return submission
 

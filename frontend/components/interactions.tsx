@@ -5,13 +5,17 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   addView,
+  createAnnotation,
   createComment,
+  deleteAnnotation,
   deleteComment,
+  getAnnotations,
   getComments,
   getInteractionStats,
   getAccessToken,
   toggleFavorite,
   toggleLike,
+  type AnnotationItem,
   type CommentItem,
   type InteractionContentType,
   type InteractionStats,
@@ -258,6 +262,192 @@ function CommentSection({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// 右侧备注面板：全员可见、无需审核，可删除、可回复。用于内容阅读页侧栏。
+export function AnnotationPanel({
+  contentType,
+  contentId,
+}: {
+  contentType: InteractionContentType;
+  contentId: number;
+}) {
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<AnnotationItem[]>([]);
+  const [body, setBody] = useState("");
+  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    getAnnotations(contentType, contentId)
+      .then(setNotes)
+      .catch(() => setNotes([]));
+  }, [contentType, contentId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submitTop() {
+    const token = getAccessToken();
+    if (!token || !body.trim()) return;
+    setBusy(true);
+    try {
+      await createAnnotation(token, contentType, contentId, body.trim());
+      setBody("");
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitReply(parentId: number) {
+    const token = getAccessToken();
+    if (!token || !replyBody.trim()) return;
+    setBusy(true);
+    try {
+      await createAnnotation(token, contentType, contentId, replyBody.trim(), parentId);
+      setReplyBody("");
+      setReplyTo(null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("确认删除该备注？")) return;
+    await deleteAnnotation(token, id);
+    load();
+  }
+
+  const tops = notes.filter((n) => n.parent_id == null);
+  const repliesOf = (id: number) => notes.filter((n) => n.parent_id === id);
+
+  return (
+    <aside className="rounded-xl border border-slate-200 bg-white p-4">
+      <h3 className="mb-1 text-base font-semibold text-slate-900">备注 ({notes.length})</h3>
+      <p className="mb-3 text-xs text-slate-400">对内容的补充说明，全员可见、即时生效。</p>
+
+      {user ? (
+        <div className="mb-4">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={2}
+            placeholder="写下你的备注 / 补充…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+          <button
+            onClick={submitTop}
+            disabled={busy || !body.trim()}
+            className="mt-2 w-full rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            添加备注
+          </button>
+        </div>
+      ) : (
+        <p className="mb-4 text-sm text-slate-400">
+          <Link href="/login" className="text-brand-600 hover:underline">
+            登录
+          </Link>
+          后可添加备注。
+        </p>
+      )}
+
+      {tops.length === 0 ? (
+        <p className="text-sm text-slate-400">还没有备注。</p>
+      ) : (
+        <div className="space-y-3">
+          {tops.map((n) => (
+            <div key={n.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <AnnotationRow
+                note={n}
+                canDelete={user?.id === n.user_id || user?.role === "admin"}
+                onDelete={remove}
+              />
+              {user && (
+                <button
+                  onClick={() => {
+                    setReplyTo(replyTo === n.id ? null : n.id);
+                    setReplyBody("");
+                  }}
+                  className="mt-1 text-xs text-brand-600 hover:underline"
+                >
+                  {replyTo === n.id ? "取消" : "回复"}
+                </button>
+              )}
+
+              {replyTo === n.id && (
+                <div className="mt-2">
+                  <textarea
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    rows={2}
+                    placeholder={`回复 ${n.author_nickname}…`}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => submitReply(n.id)}
+                    disabled={busy || !replyBody.trim()}
+                    className="mt-1 rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    发送
+                  </button>
+                </div>
+              )}
+
+              {repliesOf(n.id).length > 0 && (
+                <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                  {repliesOf(n.id).map((r) => (
+                    <AnnotationRow
+                      key={r.id}
+                      note={r}
+                      canDelete={user?.id === r.user_id || user?.role === "admin"}
+                      onDelete={remove}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function AnnotationRow({
+  note,
+  canDelete,
+  onDelete,
+}: {
+  note: AnnotationItem;
+  canDelete: boolean;
+  onDelete: (id: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-slate-800">{note.author_nickname}</span>
+        <span className="text-xs text-slate-400">
+          {new Date(note.created_at).toLocaleDateString("zh-CN")}
+        </span>
+        {canDelete && (
+          <button
+            onClick={() => onDelete(note.id)}
+            className="ml-auto text-xs text-red-400 hover:underline"
+          >
+            删除
+          </button>
+        )}
+      </div>
+      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{note.body}</p>
     </div>
   );
 }
