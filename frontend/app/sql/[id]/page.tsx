@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { AnnotationPanel, ContentInteractions } from "@/components/interactions";
+import { ContentInteractions } from "@/components/interactions";
 import { getSqlDetail, type SqlDetail } from "@/lib/api";
 
 export default function SqlDetailPage({
@@ -30,27 +30,24 @@ export default function SqlDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="min-w-0">
-            <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
-            <h2 className="mb-2 text-sm font-semibold text-slate-500">题目</h2>
-            <Prose>{item.prompt_md}</Prose>
-            <button
-              onClick={() => setShowAnswer((v) => !v)}
-              className="my-4 rounded-lg border border-slate-300 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              {showAnswer ? "隐藏答案" : "显示答案"}
-            </button>
-            {showAnswer && (
-              <>
-                <h2 className="mb-2 text-sm font-semibold text-slate-500">参考答案</h2>
-                <Prose>{item.answer_md}</Prose>
-              </>
-            )}
-            <ContentInteractions contentType="sql" contentId={item.id} />
-          </div>
-          <AnnotationPanel contentType="sql" contentId={item.id} />
-        </div>
+        <>
+          <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
+          <h2 className="mb-2 text-sm font-semibold text-slate-500">题目</h2>
+          <Prose>{item.prompt_md}</Prose>
+          <button
+            onClick={() => setShowAnswer((v) => !v)}
+            className="my-4 rounded-lg border border-slate-300 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+          >
+            {showAnswer ? "隐藏答案" : "显示答案"}
+          </button>
+          {showAnswer && (
+            <>
+              <h2 className="mb-2 text-sm font-semibold text-slate-500">参考答案</h2>
+              <Prose>{item.answer_md}</Prose>
+            </>
+          )}
+          <ContentInteractions contentType="sql" contentId={item.id} />
+        </>
       )}
     </div>
   );

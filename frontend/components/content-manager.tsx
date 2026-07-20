@@ -205,7 +205,6 @@ function InterviewQaEditor({
               rows={2}
               className={inputCls}
               hint={false}
-              toolbar={false}
             />
             <button
               type="button"
@@ -526,7 +525,6 @@ export function AiImportPanel({
                       rows={4}
                       className={inputCls}
                       hint={false}
-                      toolbar={false}
                     />
                   )}
                   {type === "sql" && (
@@ -575,7 +573,6 @@ export function AiImportPanel({
                         rows={3}
                         className={inputCls}
                         hint={false}
-                        toolbar={false}
                       />
                       <MarkdownTextarea
                         value={d.implementation_md}
@@ -584,7 +581,6 @@ export function AiImportPanel({
                         rows={2}
                         className={inputCls}
                         hint={false}
-                        toolbar={false}
                       />
                     </>
                   )}

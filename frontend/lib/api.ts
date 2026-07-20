@@ -226,42 +226,6 @@ export function deleteComment(token: string, commentId: number): Promise<void> {
   return authRequest<void>(`/interactions/comments/${commentId}`, token, { method: "DELETE" });
 }
 
-export interface AnnotationItem {
-  id: number;
-  user_id: number;
-  author_nickname: string;
-  author_avatar: string | null;
-  parent_id: number | null;
-  body: string;
-  created_at: string;
-}
-
-export function getAnnotations(
-  ct: InteractionContentType,
-  id: number,
-): Promise<AnnotationItem[]> {
-  return request<AnnotationItem[]>(`/interactions/${ct}/${id}/annotations`);
-}
-
-export function createAnnotation(
-  token: string,
-  ct: InteractionContentType,
-  id: number,
-  body: string,
-  parentId?: number | null,
-): Promise<AnnotationItem> {
-  return authRequest<AnnotationItem>(`/interactions/${ct}/${id}/annotations`, token, {
-    method: "POST",
-    body: JSON.stringify({ body, parent_id: parentId ?? null }),
-  });
-}
-
-export function deleteAnnotation(token: string, annotationId: number): Promise<void> {
-  return authRequest<void>(`/interactions/annotations/${annotationId}`, token, {
-    method: "DELETE",
-  });
-}
-
 export function getMyFavorites(token: string): Promise<FavoriteItem[]> {
   return authRequest<FavoriteItem[]>("/interactions/me/favorites", token);
 }

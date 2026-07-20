@@ -59,26 +59,6 @@ class Comment(Base):
     )
 
 
-class Annotation(Base):
-    """内容旁的备注（笔记）：全员可见、无需审核；``parent_id`` 非空表示对某备注的回复。"""
-
-    __tablename__ = "annotations"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    content_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    parent_id: Mapped[int | None] = mapped_column(
-        ForeignKey("annotations.id", ondelete="CASCADE"), nullable=True
-    )
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-
-
 class ContentView(Base):
     """内容浏览量计数（每种内容一行）。"""
 

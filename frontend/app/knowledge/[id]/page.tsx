@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { AnnotationPanel, ContentInteractions } from "@/components/interactions";
+import { ContentInteractions } from "@/components/interactions";
 import { UnlockPanel } from "@/components/unlock";
 import { getAccessToken, getKnowledgeDetail, type KnowledgeDetail } from "@/lib/api";
 
@@ -34,26 +34,21 @@ export default function KnowledgeDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="min-w-0">
-            <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
-            {item.locked ? (
-              <UnlockPanel
-                contentType="knowledge"
-                contentId={item.id}
-                priceCash={item.price_cash}
-                pricePoints={item.price_points}
-                onUnlocked={load}
-              />
-            ) : (
-              <Prose>{item.content_md ?? ""}</Prose>
-            )}
-            <ContentInteractions contentType="knowledge" contentId={item.id} />
-          </div>
-          {!item.locked && (
-            <AnnotationPanel contentType="knowledge" contentId={item.id} />
+        <>
+          <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
+          {item.locked ? (
+            <UnlockPanel
+              contentType="knowledge"
+              contentId={item.id}
+              priceCash={item.price_cash}
+              pricePoints={item.price_points}
+              onUnlocked={load}
+            />
+          ) : (
+            <Prose>{item.content_md ?? ""}</Prose>
           )}
-        </div>
+          <ContentInteractions contentType="knowledge" contentId={item.id} />
+        </>
       )}
     </div>
   );
