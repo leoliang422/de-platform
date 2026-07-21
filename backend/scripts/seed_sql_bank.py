@@ -44,6 +44,7 @@ CATEGORIES: list[dict[str, object]] = [
     {"slug": "concurrency", "name": "同时在线与并发", "order": 8},
     {"slug": "graph-relation", "name": "图与关系（好友）", "order": 9},
     {"slug": "ratio-metric", "name": "比率与实验指标", "order": 10},
+    {"slug": "join", "name": "多表连接与自连接", "order": 11},
 ]
 
 
@@ -1179,6 +1180,416 @@ GROUP BY group_name;
 ```
 
 > 注意：用 `COUNT(DISTINCT uid)` 而非 `COUNT(*)`，避免同一用户多条日志导致分母虚高。
+""",
+    ),
+    # ---------------- 多表连接与自连接 ----------------
+    _q(
+        "join",
+        "薪资高于其直属经理的员工",
+        "easy",
+        "自连接,上下级,比较",
+        """
+给定员工表 `emp(emp_id, name, salary, manager_id)`，`manager_id` 指向本表的 `emp_id`（经理也是员工）。
+
+**要求**：找出**薪资严格高于其直属经理**的员工姓名。
+""",
+        """
+| emp_id | name | salary | manager_id |
+| --- | --- | --- | --- |
+| 1 | Joe | 70000 | 3 |
+| 2 | Henry | 80000 | 4 |
+| 3 | Sam | 60000 | NULL |
+| 4 | Max | 90000 | NULL |
+
+> 期望：Joe（70000 > 经理 Sam 60000）。
+""",
+        """
+1. 员工与经理在同一张表，用**自连接**：员工行的 `manager_id` 关联经理行的 `emp_id`。
+2. 用 `INNER JOIN` 自然排除没有经理的记录，再比较两侧 `salary`。
+""",
+        """
+```sql
+SELECT e.name
+FROM emp e
+JOIN emp m            -- m 为 e 的直属经理
+  ON e.manager_id = m.emp_id
+WHERE e.salary > m.salary;
+```
+
+> 注意：用 `INNER JOIN` 而非 `LEFT JOIN`，无经理者（`manager_id IS NULL`）自动不参与比较。
+""",
+    ),
+    _q(
+        "join",
+        "至少有 5 名直接下属的经理",
+        "medium",
+        "自连接,分组计数,having",
+        """
+给定员工表 `emp(emp_id, name, manager_id)`，`manager_id` 指向本表 `emp_id`。
+
+**要求**：找出**直接下属人数 >= 5** 的经理姓名。
+""",
+        """
+| emp_id | name | manager_id |
+| --- | --- | --- |
+| 101 | A | NULL |
+| 102 | B | 101 |
+| 103 | C | 101 |
+| 104 | D | 101 |
+| 105 | E | 101 |
+| 106 | F | 101 |
+
+> 期望：A（其下属 B/C/D/E/F 共 5 人）。
+""",
+        """
+1. 按 `manager_id` 分组统计**直接下属数**，用 `HAVING` 过滤 `>= 5`。
+2. 再关联员工表把 `manager_id` 换成经理姓名。
+""",
+        """
+```sql
+SELECT m.name
+FROM emp m
+JOIN (
+  SELECT manager_id, COUNT(*) AS sub_cnt   -- 每个经理的直接下属数
+  FROM emp
+  WHERE manager_id IS NOT NULL
+  GROUP BY manager_id
+  HAVING COUNT(*) >= 5
+) t ON m.emp_id = t.manager_id;
+```
+
+> 注意：先在子查询里 `GROUP BY ... HAVING` 收敛数据，再 JOIN 取名，避免对全表做大连接。
+""",
+    ),
+    _q(
+        "join",
+        "统计每个专业的学生人数（含 0 人专业）",
+        "medium",
+        "left join,补零,分组计数",
+        """
+给定专业表 `dept(dept_id, dept_name)` 与学生表 `student(stu_id, dept_id)`。
+
+**要求**：统计**每个专业的学生人数**，没有学生的专业也要出现，人数记为 0，按人数降序、专业名升序排序。
+""",
+        """
+| dept_id | dept_name |
+| --- | --- |
+| 1 | 计算机 |
+| 2 | 数学 |
+| 3 | 物理 |
+
+| stu_id | dept_id |
+| --- | --- |
+| 1001 | 1 |
+| 1002 | 1 |
+| 1003 | 2 |
+
+> 期望：计算机 2、数学 1、物理 0。
+""",
+        """
+1. 以**专业表为主表** `LEFT JOIN` 学生表，保证 0 人专业不被过滤掉。
+2. 用 `COUNT(student.stu_id)` 而非 `COUNT(*)`：`COUNT(列)` 不统计 NULL，未匹配到学生的专业自然计 0。
+""",
+        """
+```sql
+SELECT d.dept_name,
+       COUNT(s.stu_id) AS stu_cnt      -- 计数列而非 *，未匹配的 NULL 记 0
+FROM dept d
+LEFT JOIN student s ON d.dept_id = s.dept_id
+GROUP BY d.dept_name
+ORDER BY stu_cnt DESC, d.dept_name ASC;
+```
+
+> 注意：`COUNT(*)` 会把 LEFT JOIN 产生的空行也算 1，导致 0 人专业错误地变成 1。
+""",
+    ),
+    # ---------------- 聚合与去重（补充） ----------------
+    _q(
+        "aggregate",
+        "查找重复的邮箱",
+        "easy",
+        "分组,having,重复值",
+        """
+给定用户表 `person(id, email)`。
+
+**要求**：找出**表中重复出现**的邮箱（出现次数 >= 2）。
+""",
+        """
+| id | email |
+| --- | --- |
+| 1 | a@x.com |
+| 2 | b@x.com |
+| 3 | a@x.com |
+
+> 期望：a@x.com（出现 2 次）。
+""",
+        """
+1. 按 `email` 分组计数，`HAVING COUNT(*) > 1` 即为重复邮箱。
+2. 若邮箱大小写需视为相同，先 `LOWER(email)` 再分组。
+""",
+        """
+```sql
+SELECT email
+FROM person
+GROUP BY email
+HAVING COUNT(*) > 1;
+```
+
+> 注意：过滤聚合结果要用 `HAVING`，`WHERE` 不能引用 `COUNT(*)` 等聚合值。
+""",
+    ),
+    _q(
+        "aggregate",
+        "删除重复邮箱只保留每组最小 id",
+        "medium",
+        "去重,保留最小id,窗口函数",
+        """
+给定用户表 `person(id, email)`，同一邮箱可能出现多行。
+
+**要求**：对每个邮箱**只保留 id 最小的一行**，其余视为需删除。请给出「保留结果集」以及「需删除的 id 集合」。
+""",
+        """
+| id | email |
+| --- | --- |
+| 1 | a@x.com |
+| 2 | b@x.com |
+| 3 | a@x.com |
+
+> 期望：保留 id=1、2；需删除 id=3。
+""",
+        """
+1. 按 `email` 分区、`id` 升序取 `ROW_NUMBER`，`rn=1` 即每组最小 id。
+2. 保留结果取 `rn = 1`；需删除的取 `rn > 1`。
+3. 若在 MySQL 里真删除，可用 `DELETE p1 FROM person p1 JOIN person p2 ON p1.email=p2.email AND p1.id>p2.id`。
+""",
+        """
+```sql
+-- 保留每个邮箱 id 最小的一行
+SELECT id, email
+FROM (
+  SELECT id, email,
+         ROW_NUMBER() OVER (PARTITION BY email ORDER BY id) AS rn
+  FROM person
+) t
+WHERE rn = 1;
+
+-- 需删除的 id（rn > 1）
+SELECT id
+FROM (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY email ORDER BY id) AS rn
+  FROM person
+) t
+WHERE rn > 1;
+```
+
+> 注意：Hive/Spark 无原地 `DELETE`，通常用「重写保留结果覆盖写回」实现去重。
+""",
+    ),
+    # ---------------- 分组 TopN 与排名（补充） ----------------
+    _q(
+        "group-topn",
+        "分数排名（并列同名次且名次连续）",
+        "medium",
+        "dense_rank,排名,并列",
+        """
+给定分数表 `scores(id, score)`。
+
+**要求**：按分数从高到低排名。**分数相同名次相同**，且名次**连续不跳号**（如 1,1,2,3）。返回 `score` 与其名次。
+""",
+        """
+| id | score |
+| --- | --- |
+| 1 | 3.50 |
+| 2 | 3.65 |
+| 3 | 4.00 |
+| 4 | 3.85 |
+| 5 | 4.00 |
+
+> 期望：4.00→1、4.00→1、3.85→2、3.65→3、3.50→4。
+""",
+        """
+1. 名次相同且连续不跳号，正是 `DENSE_RANK` 的语义。
+2. 若要求「并列跳号」（1,1,3）则用 `RANK`；「唯一序号」用 `ROW_NUMBER`。
+""",
+        """
+```sql
+SELECT score,
+       DENSE_RANK() OVER (ORDER BY score DESC) AS rnk
+FROM scores
+ORDER BY score DESC;
+```
+
+> 注意：`rank` 在很多方言里是保留字，做列别名时建议改名（如 `rnk`）或加反引号。
+""",
+    ),
+    # ---------------- 行列转换（补充） ----------------
+    _q(
+        "pivot",
+        "相邻两两交换座位号",
+        "medium",
+        "case,奇偶,行内交换",
+        """
+给定座位表 `seat(id, name)`，`id` 从 1 连续递增。
+
+**要求**：**两两相邻交换**座位——1 与 2 换、3 与 4 换……。若总人数为奇数，最后一位座位不变。返回按 `id` 升序的新座位表。
+""",
+        """
+| id | name |
+| --- | --- |
+| 1 | Abbot |
+| 2 | Doris |
+| 3 | Emerson |
+| 4 | Green |
+| 5 | Jeames |
+
+> 期望：id=1→Doris、2→Abbot、3→Green、4→Emerson、5→Jeames（末位奇数不变）。
+""",
+        """
+1. 新 id 规则：奇数 `id` 变 `id+1`，偶数 `id` 变 `id-1`。
+2. 末位为奇数时 `id+1` 超出最大 id，需保持不变——用总人数判断。
+3. 用 `CASE` 计算新 id 后按新 id 排序即可。
+""",
+        """
+```sql
+SELECT
+  CASE
+    WHEN id % 2 = 1 AND id = (SELECT MAX(id) FROM seat) THEN id  -- 末位奇数不变
+    WHEN id % 2 = 1 THEN id + 1                                   -- 奇数与后一位换
+    ELSE id - 1                                                   -- 偶数与前一位换
+  END AS id,
+  name
+FROM seat
+ORDER BY id;
+```
+
+> 注意：奇数总人数时最后一行必须特判，否则会被换到一个不存在的座位。
+""",
+    ),
+    # ---------------- 图与关系（补充） ----------------
+    _q(
+        "graph-relation",
+        "标记二叉树节点的类型（根/内部/叶子）",
+        "medium",
+        "树,自连接,case,节点类型",
+        """
+给定树表 `tree(id, p_id)`，`p_id` 为父节点 id；根节点的 `p_id` 为 NULL。
+
+**要求**：为每个节点标注类型——`Root`（无父）、`Leaf`（无子）、`Inner`（既有父又有子）。
+""",
+        """
+| id | p_id |
+| --- | --- |
+| 1 | NULL |
+| 2 | 1 |
+| 3 | 1 |
+| 4 | 2 |
+| 5 | 2 |
+
+> 期望：1→Root、2→Inner、3→Leaf、4→Leaf、5→Leaf。
+""",
+        """
+1. `p_id IS NULL` → 根节点 `Root`。
+2. 否则看该节点 id 是否出现在别人的 `p_id` 中：出现则为 `Inner`，不出现则为 `Leaf`。
+3. 用「是否存在子节点」的集合做判断（`IN` 子查询或半连接）。
+""",
+        """
+```sql
+SELECT id,
+  CASE
+    WHEN p_id IS NULL THEN 'Root'
+    WHEN id IN (SELECT DISTINCT p_id FROM tree WHERE p_id IS NOT NULL) THEN 'Inner'
+    ELSE 'Leaf'
+  END AS node_type
+FROM tree;
+```
+
+> 注意：判断顺序要先处理 `Root`，否则只有一个根节点的树会被误判为 `Leaf`。
+""",
+    ),
+    _q(
+        "graph-relation",
+        "好友数最多的用户",
+        "medium",
+        "无向图,union,分组计数,topn",
+        """
+给定好友申请成功表 `request_accepted(requester_id, accepter_id)`，好友关系是**无向**的（双方互为好友）。
+
+**要求**：找出**好友数最多**的用户及其好友数。
+""",
+        """
+| requester_id | accepter_id |
+| --- | --- |
+| 1 | 2 |
+| 1 | 3 |
+| 2 | 3 |
+| 3 | 4 |
+
+> 期望：用户 3 好友数 3（与 1、2、4）。
+""",
+        """
+1. 无向关系里，一个人既可能是 `requester` 也可能是 `accepter`，两列都要计入。
+2. 用 `UNION ALL` 把两列摊成一列 `uid`，再按 `uid` 分组计数。
+3. 取计数最大的用户（并列可用窗口排名保留）。
+""",
+        """
+```sql
+SELECT uid, COUNT(*) AS friend_cnt
+FROM (
+  SELECT requester_id AS uid FROM request_accepted
+  UNION ALL
+  SELECT accepter_id  AS uid FROM request_accepted
+) t
+GROUP BY uid
+ORDER BY friend_cnt DESC
+LIMIT 1;
+```
+
+> 注意：用 `UNION ALL` 而非 `UNION`——同一条好友关系两列本就代表两个人各 +1，去重会漏计。
+""",
+    ),
+    # ---------------- 同比环比与累计（补充） ----------------
+    _q(
+        "trend-cumulative",
+        "员工近 3 个月的累计薪水（不含最新月）",
+        "hard",
+        "累计,滑动窗口,排除最新月",
+        """
+给定月度薪水表 `salary(emp_id, pay_month, amount)`，`pay_month` 形如 `2024-01`。
+
+**要求**：对每个员工，**排除其最新的一个月**后，按月计算「当月及往前共 3 个月」的**累计薪水**（滑动 3 个月求和）。
+""",
+        """
+| emp_id | pay_month | amount |
+| --- | --- | --- |
+| 1 | 2024-01 | 20 |
+| 1 | 2024-02 | 30 |
+| 1 | 2024-03 | 40 |
+| 1 | 2024-04 | 60 |
+
+> 期望：先排除最新月 2024-04；对 01/02/03 计算滑动 3 月累计（01=20、02=50、03=90）。
+""",
+        """
+1. 先按员工取每月最新序号，标记并**剔除最新月**（`ROW_NUMBER` 降序 = 1 的那月）。
+2. 在剩余月份上按 `pay_month` 升序，用窗口帧 `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` 求滑动 3 月和。
+""",
+        """
+```sql
+SELECT emp_id, pay_month,
+       SUM(amount) OVER (
+         PARTITION BY emp_id ORDER BY pay_month
+         ROWS BETWEEN 2 PRECEDING AND CURRENT ROW   -- 当月+前2月
+       ) AS cum_3m
+FROM (
+  SELECT emp_id, pay_month, amount,
+         ROW_NUMBER() OVER (PARTITION BY emp_id ORDER BY pay_month DESC) AS rn
+  FROM salary
+) t
+WHERE rn > 1        -- 剔除最新月
+ORDER BY emp_id, pay_month;
+```
+
+> 注意：滑动累计用 `ROWS` 帧假设月份连续；若存在缺月，应先补齐月历再计算，避免「3 行」不等于「3 个月」。
 """,
     ),
 ]
