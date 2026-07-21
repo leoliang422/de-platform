@@ -83,6 +83,8 @@ log "应用数据库迁移（alembic upgrade head）"
 .venv/bin/alembic upgrade head
 log "灌入种子数据（幂等）"
 PYTHONPATH="$BACKEND" .venv/bin/python -m scripts.seed
+log "灌入 SQL 题库（幂等 upsert）"
+PYTHONPATH="$BACKEND" .venv/bin/python -m scripts.seed_sql_bank
 
 # ---- 前端依赖 ----
 if [ ! -d "$FRONTEND/node_modules" ]; then
