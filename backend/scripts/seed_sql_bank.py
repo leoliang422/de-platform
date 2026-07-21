@@ -59,11 +59,7 @@ def _q(
     solution: str,
 ) -> dict[str, str]:
     prompt_md = (
-        "## 一、题目描述\n\n"
-        + desc.strip()
-        + "\n\n**示例数据**\n\n"
-        + sample.strip()
-        + "\n"
+        "## 一、题目描述\n\n" + desc.strip() + "\n\n**示例数据**\n\n" + sample.strip() + "\n"
     )
     answer_md = (
         "## 二、求解思路\n\n"
@@ -1599,9 +1595,7 @@ async def _ensure_categories(db: AsyncSession) -> dict[str, int]:
     slug_to_id: dict[str, int] = {}
     for c in CATEGORIES:
         existing = await db.scalar(
-            select(Category).where(
-                Category.section == "sql", Category.slug == c["slug"]
-            )
+            select(Category).where(Category.section == "sql", Category.slug == c["slug"])
         )
         if existing is None:
             existing = Category(
@@ -1622,8 +1616,7 @@ async def seed_sql_bank() -> None:
         slug_to_id = await _ensure_categories(db)
 
         existing_by_title = {
-            row.title: row
-            for row in (await db.execute(select(SqlQuestion))).scalars().all()
+            row.title: row for row in (await db.execute(select(SqlQuestion))).scalars().all()
         }
 
         inserted = 0
