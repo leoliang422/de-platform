@@ -247,8 +247,20 @@ function InterviewCardView({
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <AuthorLink post={post} />
+        {post.rounds_covered.length > 0 && (
+          <div className="flex shrink-0 flex-wrap justify-end gap-1">
+            {post.rounds_covered.map((r) => (
+              <span
+                key={r}
+                className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+              >
+                {INTERVIEW_ROUND_LABEL[r] ?? r}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {post.locked ? (
@@ -270,13 +282,7 @@ function InterviewCardView({
             />
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
-              <p className="text-sm text-slate-600">
-                本篇面经内容已隐藏
-                {post.rounds_covered.length > 0 &&
-                  `（含 ${post.rounds_covered
-                    .map((r) => INTERVIEW_ROUND_LABEL[r] ?? r)
-                    .join("、")}）`}
-              </p>
+              <p className="text-sm text-slate-600">本篇面经内容已隐藏</p>
               <button
                 onClick={reveal}
                 disabled={busy}
@@ -291,9 +297,11 @@ function InterviewCardView({
         <div className="mt-3 space-y-4">
           {byRound.map(({ round, items }) => (
             <div key={round}>
-              <p className="mb-2 text-sm font-semibold text-brand-700">
-                {INTERVIEW_ROUND_LABEL[round] ?? round}
-              </p>
+              {byRound.length > 1 && (
+                <p className="mb-2 text-sm font-semibold text-brand-700">
+                  {INTERVIEW_ROUND_LABEL[round] ?? round}
+                </p>
+              )}
               <div className="space-y-2">
                 {items.map((qa) => (
                   <QAItem key={qa.id} qa={qa} />
