@@ -149,9 +149,7 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
 
     # 按类型聚合，每篇为一次完整面试（卡片）。以作者身份查看（作者对自己内容始终可见）。
     by_type = (
-        await client.get(
-            f"/companies/{company_id}/interviews-by-type", headers=_auth(user_token)
-        )
+        await client.get(f"/companies/{company_id}/interviews-by-type", headers=_auth(user_token))
     ).json()
     campus = next(g for g in by_type["groups"] if g["interview_type"] == "campus")
     assert campus["count"] == 1

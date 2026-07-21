@@ -49,9 +49,7 @@ async def approve_submission(
     data: ApproveIn | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> SubmissionOut:
-    submission = await SubmissionService(db).approve(
-        submission_id, data.content if data else None
-    )
+    submission = await SubmissionService(db).approve(submission_id, data.content if data else None)
     return SubmissionOut.model_validate(submission)
 
 
@@ -184,9 +182,7 @@ async def _load_user_access(db: AsyncSession, user: User) -> AdminUserAccessOut:
         .all()
     )
     modules = [
-        ModuleAccessItem(
-            module=m, label=label, unlocked=is_admin or m in unlocked_modules
-        )
+        ModuleAccessItem(module=m, label=label, unlocked=is_admin or m in unlocked_modules)
         for m, label in _MODULE_LABELS.items()
     ]
 
@@ -203,12 +199,16 @@ async def _load_user_access(db: AsyncSession, user: User) -> AdminUserAccessOut:
         .all()
     )
     project_rows = (
-        await db.execute(
-            select(Project)
-            .where(Project.status == "published", Project.access_type != "free")
-            .order_by(Project.id.desc())
+        (
+            await db.execute(
+                select(Project)
+                .where(Project.status == "published", Project.access_type != "free")
+                .order_by(Project.id.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     projects = [
         ProjectAccessItem(
             id=p.id,
@@ -229,9 +229,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
 
 
 @router.get("/users/{user_id}/access", response_model=AdminUserAccessOut)
-async def get_user_access(
-    user_id: int, db: AsyncSession = Depends(get_db)
-) -> AdminUserAccessOut:
+async def get_user_access(user_id: int, db: AsyncSession = Depends(get_db)) -> AdminUserAccessOut:
     user = await _get_user_or_404(db, user_id)
     return await _load_user_access(db, user)
 
@@ -251,9 +249,7 @@ async def grant_module_access(
         )
     )
     if exists is None:
-        db.add(
-            ModuleAccessLog(user_id=user.id, module=module, item_id=MODULE_UNLOCK_MARKER)
-        )
+        db.add(ModuleAccessLog(user_id=user.id, module=module, item_id=MODULE_UNLOCK_MARKER))
         await db.commit()
     return await _load_user_access(db, user)
 

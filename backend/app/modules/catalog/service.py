@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -114,7 +115,7 @@ async def reorder_categories(
     await db.commit()
 
 
-def _section_items(rows: Iterable[object]) -> dict[int | None, list[FolderItem]]:
+def _section_items(rows: Iterable[Any]) -> dict[int | None, list[FolderItem]]:
     grouped: dict[int | None, list[FolderItem]] = {}
     for r in rows:
         cid = getattr(r, "category_id", None)
@@ -130,6 +131,7 @@ async def build_folder_tree(db: AsyncSession, section: str) -> FolderTree:
 
     # 取该 section 下带 category_id 的内容作为"文件"
     grouped: dict[int | None, list[FolderItem]] = {}
+    rows: Sequence[Any]
     if section == "knowledge":
         from app.modules.knowledge.models import KnowledgeItem
 

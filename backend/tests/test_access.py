@@ -120,9 +120,7 @@ async def test_interview_card_locked_then_revealed(client: AsyncClient, db: Asyn
 
     # 列表：默认锁定，qa 为空
     by_type = (
-        await client.get(
-            f"/companies/{company.id}/interviews-by-type", headers=_auth(token)
-        )
+        await client.get(f"/companies/{company.id}/interviews-by-type", headers=_auth(token))
     ).json()
     campus = next(g for g in by_type["groups"] if g["interview_type"] == "campus")
     assert campus["posts"][0]["locked"] is True
@@ -136,9 +134,7 @@ async def test_interview_card_locked_then_revealed(client: AsyncClient, db: Asyn
 
     # 再次进入列表，该卡片已解锁
     by_type2 = (
-        await client.get(
-            f"/companies/{company.id}/interviews-by-type", headers=_auth(token)
-        )
+        await client.get(f"/companies/{company.id}/interviews-by-type", headers=_auth(token))
     ).json()
     campus2 = next(g for g in by_type2["groups"] if g["interview_type"] == "campus")
     assert campus2["posts"][0]["locked"] is False

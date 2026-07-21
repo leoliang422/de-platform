@@ -103,9 +103,7 @@ async def test_db_storage_persists_and_serves(
 
         key = url.split("/uploads/", 1)[1]
         async with SessionLocal() as db:
-            row = (
-                await db.execute(select(StoredFile).where(StoredFile.key == key))
-            ).scalar_one()
+            row = (await db.execute(select(StoredFile).where(StoredFile.key == key))).scalar_one()
             assert row.content_type == "image/png"
             assert row.data == _PNG
     finally:

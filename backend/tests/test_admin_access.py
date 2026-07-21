@@ -85,9 +85,7 @@ async def test_admin_grant_and_revoke_module_and_project(
 
     # 授予 SQL 模块
     granted = (
-        await client.put(
-            f"/admin/users/{member_id}/access/module/sql", headers=_auth(admin_token)
-        )
+        await client.put(f"/admin/users/{member_id}/access/module/sql", headers=_auth(admin_token))
     ).json()
     assert next(m for m in granted["modules"] if m["module"] == "sql")["unlocked"] is True
 

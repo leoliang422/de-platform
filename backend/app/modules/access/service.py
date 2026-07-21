@@ -106,8 +106,10 @@ class AccessService:
         used = await self._free_used(user.id, module)
         price = self.unlock_points(module)
 
-        if self._is_privileged(user, author_id) or unlocked or await self._has_item(
-            user.id, module, item_id
+        if (
+            self._is_privileged(user, author_id)
+            or unlocked
+            or await self._has_item(user.id, module, item_id)
         ):
             return RevealState(
                 granted=True,

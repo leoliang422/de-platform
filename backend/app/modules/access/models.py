@@ -20,9 +20,7 @@ class ModuleAccessLog(Base):
     """
 
     __tablename__ = "module_access_log"
-    __table_args__ = (
-        UniqueConstraint("user_id", "module", "item_id", name="uq_module_access"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "module", "item_id", name="uq_module_access"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
