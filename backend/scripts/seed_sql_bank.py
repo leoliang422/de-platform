@@ -45,6 +45,7 @@ CATEGORIES: list[dict[str, object]] = [
     {"slug": "graph-relation", "name": "图与关系（好友）", "order": 9},
     {"slug": "ratio-metric", "name": "比率与实验指标", "order": 10},
     {"slug": "join", "name": "多表连接与自连接", "order": 11},
+    {"slug": "mutate", "name": "数据更新与清洗", "order": 12},
 ]
 
 
@@ -1586,6 +1587,586 @@ ORDER BY emp_id, pay_month;
 ```
 
 > 注意：滑动累计用 `ROWS` 帧假设月份连续；若存在缺月，应先补齐月历再计算，避免「3 行」不等于「3 个月」。
+""",
+    ),
+    # ---------------- 分组 TopN 与排名（补充二） ----------------
+    _q(
+        "group-topn",
+        "每个部门薪资最高的员工",
+        "easy",
+        "分组最大值,并列,窗口函数",
+        """
+给定员工表 `emp(emp_id, name, dept_id, salary)`。
+
+**要求**：找出**每个部门薪资最高**的员工（若并列最高则都保留）。
+""",
+        """
+| emp_id | name | dept_id | salary |
+| --- | --- | --- | --- |
+| 1 | A | 10 | 30000 |
+| 2 | B | 10 | 30000 |
+| 3 | C | 10 | 20000 |
+| 4 | D | 20 | 40000 |
+
+> 期望：部门 10 的 A、B（并列 30000），部门 20 的 D。
+""",
+        """
+1. 按部门分区、薪资降序取 `RANK`（并列同名次），过滤 `rk = 1`。
+2. 也可先求每部门 `MAX(salary)` 再回连；但窗口写法一遍扫描更简洁，且天然处理并列。
+""",
+        """
+```sql
+SELECT dept_id, emp_id, name, salary
+FROM (
+  SELECT dept_id, emp_id, name, salary,
+         RANK() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS rk
+  FROM emp
+) t
+WHERE rk = 1;
+```
+
+> 注意：要"并列都保留"用 `RANK`/`DENSE_RANK`；只取一个用 `ROW_NUMBER`。
+""",
+    ),
+    _q(
+        "group-topn",
+        "每位学生成绩最高的科目",
+        "medium",
+        "argmax,分组取最值行,row_number",
+        """
+给定成绩表 `score(stu_id, subject, score)`。
+
+**要求**：取出**每位学生分数最高的那门科目**（并列取科目名字典序最小的一条）。
+""",
+        """
+| stu_id | subject | score |
+| --- | --- | --- |
+| 1 | math | 90 |
+| 1 | english | 95 |
+| 1 | chinese | 95 |
+| 2 | math | 80 |
+
+> 期望：学生 1 → chinese（95，与 english 并列取字典序小者）；学生 2 → math。
+""",
+        """
+1. 这是"分组取最值所在行"（argmax）问题，不能只 `MAX(score)`（拿不到对应科目）。
+2. 按学生分区，`score` 降序、`subject` 升序取 `ROW_NUMBER`，`rn = 1` 即所需行。
+""",
+        """
+```sql
+SELECT stu_id, subject, score
+FROM (
+  SELECT stu_id, subject, score,
+         ROW_NUMBER() OVER (
+           PARTITION BY stu_id ORDER BY score DESC, subject ASC
+         ) AS rn
+  FROM score
+) t
+WHERE rn = 1;
+```
+
+> 注意：argmax 用 `ROW_NUMBER` + 二级排序打破并列，比 `MAX` 后回连更稳。
+""",
+    ),
+    # ---------------- 连续 · 区间 · 序列（补充二） ----------------
+    _q(
+        "continuous",
+        "气温高于前一天的日期",
+        "easy",
+        "lag,相邻比较,日期",
+        """
+给定每日气温表 `weather(dt, temperature)`，`dt` 为日期、每天一条。
+
+**要求**：找出**气温比前一天更高**的所有日期 `dt`。
+""",
+        """
+| dt | temperature |
+| --- | --- |
+| 2024-01-01 | 10 |
+| 2024-01-02 | 25 |
+| 2024-01-03 | 20 |
+| 2024-01-04 | 30 |
+
+> 期望：01-02（25>10）、01-04（30>20）。
+""",
+        """
+1. 用 `LAG` 取"前一天"的气温与日期。
+2. 必须校验前一行确实是"昨天"（`datediff = 1`），否则缺日时会把间隔多天的记录误判为相邻。
+""",
+        """
+```sql
+SELECT dt
+FROM (
+  SELECT dt, temperature,
+         LAG(temperature) OVER (ORDER BY dt) AS prev_temp,
+         LAG(dt)          OVER (ORDER BY dt) AS prev_dt
+  FROM weather
+) t
+WHERE temperature > prev_temp
+  AND DATEDIFF(dt, prev_dt) = 1;   -- 确保是真正的“前一天”
+```
+
+> 注意：只比较气温而不校验日期差，遇到缺失日期会出错——"前一行"未必是"前一天"。
+""",
+    ),
+    _q(
+        "continuous",
+        "连续 3 天及以上人数过百的日期",
+        "hard",
+        "连续区间,窗口分组,过滤后连续",
+        """
+给定场馆每日人流表 `stadium(id, visit_date, people)`，`id` 随日期递增。
+
+**要求**：找出**人数 >= 100 且连续出现 3 天及以上**的所有记录，按日期排序。
+""",
+        """
+| id | visit_date | people |
+| --- | --- | --- |
+| 1 | 2024-01-01 | 120 |
+| 2 | 2024-01-02 | 80 |
+| 3 | 2024-01-03 | 110 |
+| 4 | 2024-01-04 | 150 |
+| 5 | 2024-01-05 | 130 |
+
+> 期望：01-03、01-04、01-05（连续 3 天均 >= 100）。
+""",
+        """
+1. 先过滤 `people >= 100`，但过滤后 `id` 会断档，需在过滤后的集合上重建连续性。
+2. 按 `id` 升序取行号 `rn`，`id - rn` 在同一段连续区间内为常量，作为分组键 `grp`。
+3. 按 `grp` 计数，保留段长 `>= 3` 的记录。
+""",
+        """
+```sql
+SELECT id, visit_date, people
+FROM (
+  SELECT id, visit_date, people, grp,
+         COUNT(*) OVER (PARTITION BY grp) AS run_len
+  FROM (
+    SELECT id, visit_date, people,
+           id - ROW_NUMBER() OVER (ORDER BY id) AS grp  -- 过滤后重建连续分组键
+    FROM stadium
+    WHERE people >= 100
+  ) a
+) b
+WHERE run_len >= 3
+ORDER BY visit_date;
+```
+
+> 注意：先过滤再用 `id - rn` 重建连续性，直接在原表上算 `grp` 会被不达标的天数割裂。
+""",
+    ),
+    # ---------------- 聚合与去重（补充二） ----------------
+    _q(
+        "aggregate",
+        "买下了全部商品的客户",
+        "medium",
+        "关系除法,having,去重计数",
+        """
+给定购买明细 `purchase(customer_id, product_id)` 与商品表 `product(product_id)`。
+
+**要求**：找出**购买了商品表中全部商品**的客户。
+""",
+        """
+| customer_id | product_id |
+| --- | --- |
+| 1 | 10 |
+| 1 | 20 |
+| 2 | 10 |
+
+商品表 product：10、20。
+
+> 期望：客户 1（买齐 10、20）。
+""",
+        """
+1. 经典"关系除法"：客户购买的**去重商品数** = 商品总数，即买齐。
+2. `COUNT(DISTINCT product_id)` 防止同一商品多次购买导致计数虚高。
+""",
+        """
+```sql
+SELECT customer_id
+FROM purchase
+GROUP BY customer_id
+HAVING COUNT(DISTINCT product_id) = (SELECT COUNT(*) FROM product);
+```
+
+> 注意：务必用 `DISTINCT`；若明细里有下架商品，应先与 `product` 关联过滤再计数。
+""",
+    ),
+    _q(
+        "aggregate",
+        "每月交易数与通过交易数",
+        "medium",
+        "按月分组,条件聚合,格式化月份",
+        """
+给定交易表 `trans(id, country, state, amount, trans_date)`，`state` ∈ {approved, declined}。
+
+**要求**：按 `月份(yyyy-MM)` 与 `country` 统计：交易总数、通过数、交易总额、通过总额。
+""",
+        """
+| id | country | state | amount | trans_date |
+| --- | --- | --- | --- | --- |
+| 1 | US | approved | 100 | 2024-01-05 |
+| 2 | US | declined | 50 | 2024-01-20 |
+| 3 | US | approved | 200 | 2024-02-01 |
+
+> 期望：2024-01/US → 总 2、通过 1、总额 150、通过额 100；2024-02/US → 总 1、通过 1。
+""",
+        """
+1. 用日期格式化取月份作为分组键。
+2. "通过"指标用条件聚合：`SUM(CASE WHEN state='approved' THEN 1 ELSE 0 END)`。
+""",
+        """
+```sql
+SELECT
+  DATE_FORMAT(trans_date, 'yyyy-MM') AS month,   -- Spark：date_format；MySQL：DATE_FORMAT(...,'%Y-%m')
+  country,
+  COUNT(*)                                          AS trans_count,
+  SUM(CASE WHEN state = 'approved' THEN 1 ELSE 0 END)      AS approved_count,
+  SUM(amount)                                       AS trans_total,
+  SUM(CASE WHEN state = 'approved' THEN amount ELSE 0 END) AS approved_total
+FROM trans
+GROUP BY DATE_FORMAT(trans_date, 'yyyy-MM'), country;
+```
+
+> 注意：条件聚合比"过滤后再 JOIN"更省；注意各引擎日期格式化函数与占位符差异。
+""",
+    ),
+    # ---------------- 比率与实验指标（补充二） ----------------
+    _q(
+        "ratio-metric",
+        "行程取消率（排除禁止用户）",
+        "hard",
+        "比率,多表过滤,条件聚合",
+        """
+给定行程表 `trips(id, client_id, driver_id, status, request_date)`（`status` ∈ {completed, cancelled_by_driver, cancelled_by_client}）与用户表 `users(id, banned)`（`banned` ∈ {Yes, No}，角色可为 client/driver）。
+
+**要求**：统计每天的**取消率**——分母为当天「乘客与司机均未被禁止」的行程数，分子为其中被取消的行程数，结果保留两位小数。
+""",
+        """
+| id | client_id | driver_id | status | request_date |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | 10 | completed | 2024-01-01 |
+| 2 | 2 | 11 | cancelled_by_driver | 2024-01-01 |
+| 3 | 3 | 12 | completed | 2024-01-01 |
+
+users：3 号 banned=Yes，其余 No。
+
+> 期望：01-01 有效行程 2 单（1、2；行程 3 的乘客被禁止剔除），取消 1 单 → 取消率 0.50。
+""",
+        """
+1. 先把被禁止用户参与的行程剔除：`client_id`、`driver_id` 都要求 `banned = 'No'`。
+2. 分母 = 当天有效行程数；分子 = 其中 status 以 `cancelled` 开头的数。
+3. 用条件聚合一遍算出，避免两次扫描。
+""",
+        """
+```sql
+SELECT
+  request_date AS day,
+  ROUND(
+    SUM(CASE WHEN status <> 'completed' THEN 1 ELSE 0 END) / COUNT(*),
+    2
+  ) AS cancel_rate
+FROM trips t
+WHERE t.client_id IN (SELECT id FROM users WHERE banned = 'No')
+  AND t.driver_id IN (SELECT id FROM users WHERE banned = 'No')
+GROUP BY request_date;
+```
+
+> 注意：禁止用户的过滤要同时作用于乘客和司机；分母只统计"有效行程"，否则取消率会被低估。
+""",
+    ),
+    _q(
+        "ratio-metric",
+        "即时配送订单占比",
+        "medium",
+        "首单,即时率,条件聚合",
+        """
+给定配送表 `delivery(id, customer_id, order_date, pref_date)`，`order_date` 为下单日、`pref_date` 为期望送达日。若两者相等即"即时订单"，否则为"计划订单"。
+
+**要求**：计算**首单为即时订单的客户占比**（每个客户取其最早下单的一单作为首单），保留两位小数。
+""",
+        """
+| id | customer_id | order_date | pref_date |
+| --- | --- | --- | --- |
+| 1 | 1 | 2024-01-01 | 2024-01-01 |
+| 2 | 1 | 2024-01-02 | 2024-01-05 |
+| 3 | 2 | 2024-01-03 | 2024-01-06 |
+
+> 期望：客户 1 首单即时、客户 2 首单计划 → 即时占比 0.50。
+""",
+        """
+1. 每个客户按 `order_date` 升序取首单（`ROW_NUMBER = 1`）。
+2. 在首单集合上，用 `AVG(CASE WHEN order_date = pref_date THEN 1 ELSE 0 END)` 得即时占比。
+""",
+        """
+```sql
+SELECT ROUND(AVG(CASE WHEN order_date = pref_date THEN 1 ELSE 0 END), 2) AS immediate_rate
+FROM (
+  SELECT customer_id, order_date, pref_date,
+         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) AS rn
+  FROM delivery
+) t
+WHERE rn = 1;   -- 只看每个客户的首单
+```
+
+> 注意：占比分母是"客户数"而非"订单数"，所以要先收敛到每客户首单再求均值。
+""",
+    ),
+    # ---------------- 同比环比与累计（补充二） ----------------
+    _q(
+        "trend-cumulative",
+        "查询指定日期各产品的现价",
+        "medium",
+        "point-in-time,最新有效值,窗口函数",
+        """
+给定价格变更表 `products(product_id, new_price, change_date)`，记录每次调价。未出现过的产品在指定日期前价格默认为 10。
+
+**要求**：查询 **2024-08-16 当天各产品的价格**（取该日期及之前最近一次调价；若无任何调价记录则为 10）。
+""",
+        """
+| product_id | new_price | change_date |
+| --- | --- | --- |
+| 1 | 20 | 2024-08-01 |
+| 1 | 35 | 2024-08-20 |
+| 2 | 50 | 2024-08-14 |
+
+> 期望：产品 1 → 20（08-16 前最近一次是 08-01）；产品 2 → 50；无记录产品 → 10。
+""",
+        """
+1. 过滤 `change_date <= '2024-08-16'`，按产品取最近一次调价（`ROW_NUMBER` 按日期降序 = 1）。
+2. 对在该日期前**从未调价**的产品，用默认价 10 兜底（可与全量产品清单 LEFT JOIN 后 `COALESCE`）。
+""",
+        """
+```sql
+SELECT product_id, new_price AS price
+FROM (
+  SELECT product_id, new_price,
+         ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY change_date DESC) AS rn
+  FROM products
+  WHERE change_date <= DATE '2024-08-16'
+) t
+WHERE rn = 1;
+-- 若需包含“该日期前无调价”的产品并置为 10：用全量产品清单 LEFT JOIN 上表，COALESCE(price, 10)。
+```
+
+> 注意：point-in-time 取值先按"日期 <= 目标"过滤再取最近一条；默认值兜底不要漏。
+""",
+    ),
+    # ---------------- 图与关系（补充二） ----------------
+    _q(
+        "graph-relation",
+        "向公司 CEO 逐级汇报的所有人",
+        "hard",
+        "层级,多级自连接,汇报链",
+        """
+给定员工表 `employees(employee_id, name, manager_id)`，CEO 的 `employee_id = 1` 且 `manager_id` 指向自己或为 1。公司层级不超过 3 层。
+
+**要求**：找出**直接或间接向 CEO 汇报**的所有员工（不含 CEO 本人）。
+""",
+        """
+| employee_id | name | manager_id |
+| --- | --- | --- |
+| 1 | Boss | 1 |
+| 2 | A | 1 |
+| 3 | B | 2 |
+| 4 | C | 3 |
+
+> 期望：2（直属）、3（经 A）、4（经 B）；层级 <=3 故 4 通过两级到达 CEO。
+""",
+        """
+1. 层级有限（<=3），可用**逐级自连接**：第一级 `manager_id = 1`；第二级其经理的经理为 1；第三级再上溯一层。
+2. 用 `IN` 逐层扩散上级集合，最后 `UNION` 去重并排除 CEO。
+""",
+        """
+```sql
+SELECT employee_id
+FROM employees
+WHERE employee_id <> 1
+  AND (
+    manager_id = 1                                                        -- 第 1 级
+    OR manager_id IN (SELECT employee_id FROM employees WHERE manager_id = 1)  -- 第 2 级
+    OR manager_id IN (
+         SELECT employee_id FROM employees
+         WHERE manager_id IN (SELECT employee_id FROM employees WHERE manager_id = 1)
+       )                                                                  -- 第 3 级
+  );
+```
+
+> 注意：层级已知且很浅时逐级自连接最直观；层级不定应改用递归 CTE（`WITH RECURSIVE`）。
+""",
+    ),
+    _q(
+        "graph-relation",
+        "给用户推荐好友喜欢但自己没看过的页面",
+        "hard",
+        "好友关系,页面推荐,反连接",
+        """
+给定好友表 `friendship(user1_id, user2_id)`（无向）与点赞表 `likes(user_id, page_id)`。
+
+**要求**：为用户 1 推荐页面——**其好友点赞过、但用户 1 自己没点赞过**的页面（去重）。
+""",
+        """
+| user1_id | user2_id |
+| --- | --- |
+| 1 | 2 |
+| 1 | 3 |
+
+likes：2→(10,20)，3→(20,30)，1→(10)
+
+> 期望：为用户 1 推荐 20、30（好友喜欢；10 已被自己点赞故排除）。
+""",
+        """
+1. 先取用户 1 的所有好友（无向，两列都要看）。
+2. 取好友点赞过的页面集合，去重。
+3. 排除用户 1 自己已点赞的页面（反连接 / `NOT IN`）。
+""",
+        """
+```sql
+SELECT DISTINCT l.page_id AS recommended_page
+FROM likes l
+WHERE l.user_id IN (                       -- 用户 1 的好友
+        SELECT user2_id FROM friendship WHERE user1_id = 1
+        UNION
+        SELECT user1_id FROM friendship WHERE user2_id = 1
+      )
+  AND l.page_id NOT IN (                    -- 排除自己已点赞的页面
+        SELECT page_id FROM likes WHERE user_id = 1
+      );
+```
+
+> 注意：好友是无向关系，两个方向都要取；用 `NOT IN` 时注意子查询无 NULL，否则改用 `NOT EXISTS`。
+""",
+    ),
+    # ---------------- 数据更新与清洗 ----------------
+    _q(
+        "mutate",
+        "交换所有学生的性别值",
+        "easy",
+        "case,更新,取反",
+        """
+给定学生表 `salary(id, name, sex)`，`sex` 取值 `'m'` 或 `'f'`。
+
+**要求**：把所有 `'m'` 改为 `'f'`、`'f'` 改为 `'m'`（其余字段不变）。
+""",
+        """
+| id | name | sex |
+| --- | --- | --- |
+| 1 | A | m |
+| 2 | B | f |
+
+> 期望：1→f、2→m。
+""",
+        """
+1. 用 `CASE` 对 `sex` 取反即可。
+2. MySQL 可原地 `UPDATE`；Hive/Spark 无原地更新，用 `SELECT ... CASE` 重写结果覆盖写回表。
+""",
+        """
+```sql
+-- MySQL：原地更新
+UPDATE salary
+SET sex = CASE WHEN sex = 'm' THEN 'f' ELSE 'm' END;
+
+-- Hive / Spark：重写覆盖（无原地 UPDATE）
+-- INSERT OVERWRITE TABLE salary
+SELECT id, name,
+       CASE WHEN sex = 'm' THEN 'f' ELSE 'm' END AS sex
+FROM salary;
+```
+
+> 注意：一条 `CASE` 完成双向互换，不能写成两条先后 `UPDATE`（第一条改完 m→f，第二条会把它又改回去）。
+""",
+    ),
+    _q(
+        "mutate",
+        "为下过 0 类订单的客户删除其 1 类订单",
+        "medium",
+        "删除,exists,反连接",
+        """
+给定订单表 `orders(order_id, customer_id, order_type)`，`order_type` ∈ {0, 1}。
+
+**要求**：对**同时存在 0 类订单**的客户，删除其所有 1 类订单；对没有 0 类订单的客户，其 1 类订单保留。0 类订单一律保留。
+""",
+        """
+| order_id | customer_id | order_type |
+| --- | --- | --- |
+| 1 | 100 | 0 |
+| 2 | 100 | 1 |
+| 3 | 200 | 1 |
+
+> 期望：保留 order 1（0 类）、order 3（客户 200 无 0 类，其 1 类保留）；删除 order 2。
+""",
+        """
+1. "需删除"的行：`order_type = 1` 且该客户存在 `order_type = 0` 的订单。
+2. 用 `EXISTS` 判断同客户是否有 0 类；保留结果即"非需删除"的行。
+""",
+        """
+```sql
+-- 保留结果（等价于删除上述目标行后的表）
+SELECT o.*
+FROM orders o
+WHERE NOT (
+  o.order_type = 1
+  AND EXISTS (
+    SELECT 1 FROM orders b
+    WHERE b.customer_id = o.customer_id AND b.order_type = 0
+  )
+);
+
+-- MySQL 真删除：
+-- DELETE o FROM orders o
+-- WHERE o.order_type = 1
+--   AND EXISTS (SELECT 1 FROM orders b WHERE b.customer_id=o.customer_id AND b.order_type=0);
+```
+
+> 注意：删除条件要"同客户存在 0 类"用 `EXISTS` 关联当前行的 `customer_id`，别误删无 0 类客户的 1 类订单。
+""",
+    ),
+    _q(
+        "mutate",
+        "用前一个非空值填充空值",
+        "hard",
+        "向前填充,last_value,ignore nulls",
+        """
+给定表 `t(id, val)`，`id` 递增，`val` 存在空值。
+
+**要求**：对每个空的 `val`，用**其之前最近的一个非空值**填充（经典"向前填充 / forward fill"）。
+""",
+        """
+| id | val |
+| --- | --- |
+| 1 | A |
+| 2 | NULL |
+| 3 | NULL |
+| 4 | B |
+| 5 | NULL |
+
+> 期望：1→A、2→A、3→A、4→B、5→B。
+""",
+        """
+1. 用窗口按 `id` 升序取"到当前行为止最后一个非空值"。
+2. Spark/Hive 用 `LAST_VALUE(val, true)`（第二参 `true` = 忽略 NULL）配合默认窗口帧到当前行。
+3. 也可用"分段计数"法：对非空值累计计数得分组键，再在组内取首个非空值。
+""",
+        """
+```sql
+-- Spark SQL：LAST_VALUE 忽略 NULL
+SELECT id,
+       LAST_VALUE(val, true) OVER (
+         ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+       ) AS val
+FROM t;
+
+-- 通用法（不依赖 IGNORE NULLS）：用非空累计计数分段，再组内取首个非空
+SELECT id,
+       MAX(val) OVER (PARTITION BY grp) AS val
+FROM (
+  SELECT id, val,
+         COUNT(val) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS grp
+  FROM t
+) s;
+```
+
+> 注意：默认窗口帧是 `RANGE ... CURRENT ROW`，向前填充要显式写 `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`。
 """,
     ),
 ]
