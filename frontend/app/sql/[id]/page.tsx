@@ -5,7 +5,9 @@ import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
 import { AnnotatedReader, ContentInteractions } from "@/components/interactions";
+import { SqlPlayground } from "@/components/sql-playground";
 import { ModuleUnlockPanel } from "@/components/unlock";
+import { PLAYGROUND_FIXTURES } from "@/lib/sql-playground";
 import {
   ApiError,
   getAccessToken,
@@ -143,6 +145,10 @@ export default function SqlDetailPage({
           )}
 
           {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
+
+          {PLAYGROUND_FIXTURES[item.title] && (
+            <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
+          )}
 
           <ContentInteractions contentType="sql" contentId={item.id} />
         </AnnotatedReader>
