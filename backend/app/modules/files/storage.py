@@ -53,6 +53,34 @@ class LocalStorage:
         return f"{base}/uploads/{key}"
 
 
+class DbStorage:
+    """把文件存进数据库（stored_files 表），由 ``/uploads/<key>`` 路由读取。
+
+    适合 Render 免费实例这类“临时磁盘”环境：文件随数据库持久化，重部署不丢失，
+    且无需外部对象存储。图片较小（≤5MB），对 Postgres/SQLite 均可用。
+    """
+
+    name = "db"
+
+    def __init__(self) -> None:
+        self.public_base = get_settings().storage_public_base_url
+
+    async def save(self, *, data: bytes, ext: str, content_type: str) -> str:
+        # 延迟导入，避免与模型注册产生循环依赖。
+        from app.core.database import SessionLocal
+        from app.modules.files.models import StoredFile
+
+        key = _make_key(ext)
+        async with SessionLocal() as db:
+            db.add(StoredFile(key=key, content_type=content_type, data=data))
+            await db.commit()
+        return key
+
+    def public_url(self, key: str, request_base: str) -> str:
+        base = (self.public_base or request_base).rstrip("/")
+        return f"{base}/uploads/{key}"
+
+
 class S3Storage:
     """S3 兼容对象存储（R2 / TOS / MinIO）对接骨架。
 
@@ -88,6 +116,10 @@ class S3Storage:
 
 
 def get_storage() -> Storage:
-    if get_settings().storage_provider == "s3" and S3Storage.is_configured():
+    provider = get_settings().storage_provider
+    if provider == "s3" and S3Storage.is_configured():
         return S3Storage()
-    return LocalStorage()
+    if provider == "local":
+        return LocalStorage()
+    # 默认（含 provider="db"）：数据库持久化存储，重部署不丢失。
+    return DbStorage()

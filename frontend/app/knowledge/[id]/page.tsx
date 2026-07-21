@@ -40,7 +40,8 @@ export default function KnowledgeDetailPage({
       setSiblings([]);
       return;
     }
-    getKnowledgeList({ categoryId, sort: "hot", pageSize: 500 })
+    // page_size 后端上限 100；同一文件夹条目一般不超过该量级
+    getKnowledgeList({ categoryId, sort: "hot", pageSize: 100 })
       .then((res) => setSiblings(res.items))
       .catch(() => setSiblings([]));
   }, [categoryId]);

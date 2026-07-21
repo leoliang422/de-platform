@@ -7,6 +7,7 @@ Used by Alembic (autogenerate / target metadata) and by tests (create_all).
 from app.modules.access.models import ModuleAccessLog  # noqa: F401
 from app.modules.auth.models import PasswordResetToken  # noqa: F401
 from app.modules.catalog.models import Category  # noqa: F401
+from app.modules.files.models import StoredFile  # noqa: F401
 from app.modules.interactions.models import (  # noqa: F401
     Annotation,
     Comment,

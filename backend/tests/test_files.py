@@ -69,12 +69,45 @@ async def test_upload_requires_auth(client: AsyncClient) -> None:
     assert resp.status_code in (401, 403)
 
 
-def test_storage_factory_falls_back_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_storage_factory_falls_back_to_db(monkeypatch: pytest.MonkeyPatch) -> None:
     assert S3Storage.is_configured() is False
     monkeypatch.setenv("STORAGE_PROVIDER", "s3")
     get_settings.cache_clear()
     try:
-        assert get_storage().name == "local"  # 凭证未配齐回退 local
+        # 凭证未配齐 → 回退到数据库持久化存储（而非临时磁盘 local）
+        assert get_storage().name == "db"
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_db_storage_persists_and_serves(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STORAGE_PROVIDER", "db")
+    get_settings.cache_clear()
+    try:
+        token = await _token(client, "dbimg@test.io")
+        resp = await client.post(
+            "/files/images",
+            headers=_auth(token),
+            files={"file": ("a.png", _PNG, "image/png")},
+        )
+        assert resp.status_code == 201, resp.text
+        url = resp.json()["url"]
+        assert "/uploads/" in url
+        # 文件已持久化进数据库（stored_files）
+        from sqlalchemy import select
+
+        from app.core.database import SessionLocal
+        from app.modules.files.models import StoredFile
+
+        key = url.split("/uploads/", 1)[1]
+        async with SessionLocal() as db:
+            row = (
+                await db.execute(select(StoredFile).where(StoredFile.key == key))
+            ).scalar_one()
+            assert row.content_type == "image/png"
+            assert row.data == _PNG
     finally:
         get_settings.cache_clear()
 
