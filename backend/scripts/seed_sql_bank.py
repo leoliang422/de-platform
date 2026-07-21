@@ -1,24 +1,27 @@
-"""填充 SQL 题库：按题型分类的一批原创高频面试题（问题 / 求解思路 / Hive SQL）。
+"""填充 SQL 题库：按题型分类的一批原创高频面试题。
 
-内容为原创撰写，取材于行业通用 SQL 面试考点（连续区间、留存漏斗、分组 TopN、
-行列转换、同比环比、聚合去重等），不复制任何第三方站点文字，可安全公开发布。
+每题分三段：一、题目描述（含示例表与示例数据）；二、求解思路；三、求解 SQL（含注释与注意事项）。
+内容为原创撰写，取材于行业通用 SQL 面试考点，不复制任何第三方站点文字，可安全公开发布。
 
-幂等：
-- 题型分类按 (section='sql', slug) get-or-create；
-- 题目按 title 去重，已存在则跳过。
+幂等 / 可更新：
+- 题型分类按 (section='sql', slug) get-or-create，并同步名称/顺序；
+- 题目按 title upsert：已存在则更新正文（便于迭代内容），不存在则新增。
 
 运行（本地 SQLite）：
     cd backend
     export DATABASE_URL="sqlite+aiosqlite:///./dev.db"
     python -m scripts.seed_sql_bank
 
-运行（线上，示例 Neon/Postgres，注意用 asyncpg 驱动）：
+运行（线上，示例 Neon/Postgres，注意用 asyncpg 驱动、ssl=require）：
     export DATABASE_URL="postgresql+asyncpg://USER:PWD@HOST/DB?ssl=require"
     python -m scripts.seed_sql_bank
 """
 
 from __future__ import annotations
 
+# 本文件以中文题库“内容”为主，注释/说明行较长且不宜折行（会破坏 Markdown 渲染），
+# 故对整文件豁免行宽检查。
+# ruff: noqa: E501
 import asyncio
 
 from sqlalchemy import select
@@ -45,97 +48,129 @@ CATEGORIES: list[dict[str, object]] = [
 
 
 def _q(
-    cat: str, title: str, difficulty: str, tags: str, prompt: str, answer: str
+    cat: str,
+    title: str,
+    difficulty: str,
+    tags: str,
+    desc: str,
+    sample: str,
+    idea: str,
+    solution: str,
 ) -> dict[str, str]:
+    prompt_md = (
+        "## 一、题目描述\n\n"
+        + desc.strip()
+        + "\n\n**示例数据**\n\n"
+        + sample.strip()
+        + "\n"
+    )
+    answer_md = (
+        "## 二、求解思路\n\n"
+        + idea.strip()
+        + "\n\n## 三、求解 SQL（Hive / Spark SQL）\n\n"
+        + solution.strip()
+        + "\n"
+    )
     return {
         "cat": cat,
         "title": title,
         "difficulty": difficulty,
         "tags": tags,
-        "prompt_md": prompt.strip() + "\n",
-        "answer_md": answer.strip() + "\n",
+        "prompt_md": prompt_md,
+        "answer_md": answer_md,
     }
 
 
 QUESTIONS: list[dict[str, str]] = [
-    # ---------------- 连续与区间 ----------------
+    # ---------------- 连续 · 区间 · 序列 ----------------
     _q(
         "continuous",
         "每个用户的最长连续登录天数",
         "medium",
         "连续区间,窗口函数,row_number",
         """
-给定登录表 `login`：
-
-| 字段 | 说明 |
-| --- | --- |
-| uid | 用户 ID |
-| dt | 登录日期（可能同一天多条） |
+给定登录表 `login(uid, dt)`（`dt` 为登录日期，同一天可能多条）。
 
 **要求**：求每个用户历史上的**最长连续登录天数**（自然日连续）。
 """,
         """
-## 求解思路
+| uid | dt |
+| --- | --- |
+| 1 | 2024-05-01 |
+| 1 | 2024-05-02 |
+| 1 | 2024-05-03 |
+| 1 | 2024-05-06 |
+| 2 | 2024-05-01 |
+| 2 | 2024-05-03 |
 
+> 期望：用户 1 最长连续 3 天（05-01~05-03），用户 2 为 1 天。
+""",
+        """
 1. 先对 `(uid, dt)` 去重，避免同一天多条影响计数。
-2. 按用户分区、日期升序取行号 `rn`，则 `dt - rn` 对同一段连续日期是常量，可作分组键 `grp`。
-3. 按 `(uid, grp)` 计数即得每段连续长度，再对每个用户取最大值。
-
-## 参考 SQL（Hive / Spark SQL）
-
+2. 按用户分区、日期升序取行号 `rn`；对同一段连续日期，`dt - rn` 是常量，可作分组键 `grp`。
+3. 按 `(uid, grp)` 计数得每段连续长度，再对每个用户取最大值。
+""",
+        """
 ```sql
 SELECT uid, MAX(streak) AS max_streak
 FROM (
   SELECT uid, grp, COUNT(*) AS streak
   FROM (
     SELECT uid, dt,
+           -- 连续日期上，dt 与行号同步 +1，二者相减为常量，可作分组键
            DATE_SUB(dt, ROW_NUMBER() OVER (PARTITION BY uid ORDER BY dt)) AS grp
-    FROM (SELECT DISTINCT uid, dt FROM login) d
+    FROM (SELECT DISTINCT uid, dt FROM login) d   -- 先去重，避免一天多条
   ) t
   GROUP BY uid, grp
 ) s
 GROUP BY uid;
 ```
+
+> 注意：务必先按 `(uid, dt)` 去重；否则同一天的重复登录会把行号打乱，分组键失效。
 """,
     ),
     _q(
         "continuous",
         "存在连续 3 天 GMV 严格递增的商户",
         "hard",
-        "连续区间,lag,自连接",
+        "连续区间,lag,窗口函数",
         """
-给定商户日成交表 `sales`：
-
-| 字段 | 说明 |
-| --- | --- |
-| shop_id | 商户 ID |
-| dt | 日期 |
-| gmv | 当日成交额 |
+给定商户日成交表 `sales(shop_id, dt, gmv)`。
 
 **要求**：找出**存在连续 3 个自然日 GMV 严格递增**的商户。
 """,
         """
-## 求解思路
+| shop_id | dt | gmv |
+| --- | --- | --- |
+| A | 2024-05-01 | 100 |
+| A | 2024-05-02 | 120 |
+| A | 2024-05-03 | 150 |
+| B | 2024-05-01 | 200 |
+| B | 2024-05-02 | 180 |
 
+> 期望：仅商户 A（100 < 120 < 150 且日期连续）。
+""",
+        """
 1. 用 `LAG` 取每行前 1 天、前 2 天的日期与 GMV。
-2. 要求日期严格相邻（`DATEDIFF=1`）且 GMV 逐日严格递增。
+2. 要求日期严格相邻（`DATEDIFF = 1`）且 GMV 逐日严格递增。
 3. 命中的商户去重即可。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT DISTINCT shop_id
 FROM (
   SELECT shop_id, dt, gmv,
-         LAG(gmv, 1) OVER (PARTITION BY shop_id ORDER BY dt) AS gmv1,
+         LAG(gmv, 1) OVER (PARTITION BY shop_id ORDER BY dt) AS gmv1,  -- 前一天 GMV
          LAG(dt,  1) OVER (PARTITION BY shop_id ORDER BY dt) AS dt1,
-         LAG(gmv, 2) OVER (PARTITION BY shop_id ORDER BY dt) AS gmv2,
+         LAG(gmv, 2) OVER (PARTITION BY shop_id ORDER BY dt) AS gmv2,  -- 前两天 GMV
          LAG(dt,  2) OVER (PARTITION BY shop_id ORDER BY dt) AS dt2
   FROM sales
 ) t
-WHERE DATEDIFF(dt, dt1) = 1 AND DATEDIFF(dt1, dt2) = 1
-  AND gmv > gmv1 AND gmv1 > gmv2;
+WHERE DATEDIFF(dt, dt1) = 1 AND DATEDIFF(dt1, dt2) = 1   -- 三天日期连续
+  AND gmv > gmv1 AND gmv1 > gmv2;                        -- 严格递增
 ```
+
+> 注意：`DATEDIFF` 条件不可省略，否则跨越缺失日期也会被误判为“连续”。
 """,
     ),
     _q(
@@ -144,42 +179,44 @@ WHERE DATEDIFF(dt, dt1) = 1 AND DATEDIFF(dt1, dt2) = 1
         "hard",
         "区间合并,窗口函数,累计求和",
         """
-给定活跃区间表 `activity`（同一用户区间可能重叠或相邻）：
-
-| 字段 | 说明 |
-| --- | --- |
-| uid | 用户 ID |
-| start_dt | 区间开始日期 |
-| end_dt | 区间结束日期 |
+给定活跃区间表 `activity(uid, start_dt, end_dt)`（同一用户区间可能重叠或相邻）。
 
 **要求**：把每个用户**重叠或相邻的区间合并**，输出合并后的区间。
 """,
         """
-## 求解思路
+| uid | start_dt | end_dt |
+| --- | --- | --- |
+| 1 | 2024-05-01 | 2024-05-03 |
+| 1 | 2024-05-02 | 2024-05-05 |
+| 1 | 2024-05-08 | 2024-05-09 |
 
+> 期望：合并为 (05-01 ~ 05-05) 和 (05-08 ~ 05-09)。
+""",
+        """
 1. 按 `start_dt` 排序，用窗口取「当前行之前所有区间的最大 end」（前缀最大结束日）。
-2. 若当前 `start_dt` 大于前缀最大结束日，说明与前面断开，是新区间起点，标记 `is_new=1`。
+2. 若当前 `start_dt` 大于该前缀最大结束日，说明与前面断开，是新区间起点，标记 `is_new=1`。
 3. 对 `is_new` 做累计求和得到区间分组号 `seg_id`，按组取 `MIN(start)`、`MAX(end)`。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT uid, MIN(start_dt) AS seg_start, MAX(end_dt) AS seg_end
 FROM (
   SELECT uid, start_dt, end_dt,
          SUM(is_new) OVER (PARTITION BY uid ORDER BY start_dt
-                           ROWS UNBOUNDED PRECEDING) AS seg_id
+                           ROWS UNBOUNDED PRECEDING) AS seg_id   -- 累计得区间编号
   FROM (
     SELECT uid, start_dt, end_dt,
            CASE WHEN start_dt <= MAX(end_dt) OVER (
                        PARTITION BY uid ORDER BY start_dt
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)  -- 之前的最大 end
                 THEN 0 ELSE 1 END AS is_new
     FROM activity
   ) t
 ) s
 GROUP BY uid, seg_id;
 ```
+
+> 注意：前缀最大值窗口帧要用 `... AND 1 PRECEDING`（不含当前行），否则会把自己算进去导致永远不新开区间。
 """,
     ),
     _q(
@@ -188,20 +225,26 @@ GROUP BY uid, seg_id;
         "hard",
         "连续区间,分段,datediff",
         """
-给定登录表 `login(uid, dt)`。定义：相邻两次登录**间隔不超过 2 天**（即最多断 1 天）
-视为同一段活跃。
+给定登录表 `login(uid, dt)`。定义：相邻两次登录**间隔不超过 2 天**（即最多断 1 天）视为同一段活跃。
 
 **要求**：求每个用户活跃段覆盖的**最长天数跨度**（段内最晚日期 − 最早日期 + 1）。
 """,
         """
-## 求解思路
+| uid | dt |
+| --- | --- |
+| 1 | 2024-05-01 |
+| 1 | 2024-05-02 |
+| 1 | 2024-05-04 |
+| 1 | 2024-05-07 |
 
+> 期望：05-01、05-02、05-04 属同一段（间隔 ≤ 2 天），跨度 4 天；05-07 另起一段。
+""",
+        """
 1. `(uid, dt)` 去重后按日期排序，用 `LAG` 取上一次登录日期。
 2. 若与上一次间隔 `> 2` 天则开启新段（`is_new=1`），累计求和得段号 `seg_id`。
 3. 每段取 `MIN(dt)`、`MAX(dt)`，跨度 = `DATEDIFF(max, min) + 1`，再对用户取最大。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT uid, MAX(DATEDIFF(seg_end, seg_start) + 1) AS max_span
 FROM (
@@ -213,7 +256,7 @@ FROM (
     FROM (
       SELECT uid, dt,
              CASE WHEN DATEDIFF(dt, LAG(dt) OVER (PARTITION BY uid ORDER BY dt)) <= 2
-                  THEN 0 ELSE 1 END AS is_new
+                  THEN 0 ELSE 1 END AS is_new    -- 间隔 ≤ 2 天算同段
       FROM (SELECT DISTINCT uid, dt FROM login) d
     ) t
   ) g
@@ -221,6 +264,8 @@ FROM (
 ) s
 GROUP BY uid;
 ```
+
+> 注意：这里求的是「跨度天数」而非「登录次数」，用 max−min+1；若要登录次数改用 COUNT。
 """,
     ),
     _q(
@@ -234,18 +279,26 @@ GROUP BY uid;
 **要求**：找出所有**波峰**（比前一天、后一天都高）和**波谷**（比前一天、后一天都低）的日期。
 """,
         """
-## 求解思路
+| dt | price |
+| --- | --- |
+| 2024-05-01 | 10 |
+| 2024-05-02 | 14 |
+| 2024-05-03 | 9 |
+| 2024-05-04 | 12 |
 
+> 期望：05-02 为波峰（14），05-03 为波谷（9）。
+""",
+        """
 1. 用 `LAG` 取前一天价格、`LEAD` 取后一天价格。
 2. 当天价格同时大于前后即为波峰，同时小于前后即为波谷。
-3. 首尾两天没有完整前后邻居，天然不会命中（`LAG/LEAD` 为 NULL）。
-
-## 参考 SQL（Hive / Spark SQL）
-
+3. 首尾两天没有完整前后邻居，`LAG/LEAD` 为 NULL，天然不会命中。
+""",
+        """
 ```sql
 SELECT dt, price,
-       CASE WHEN price > prev AND price > next THEN 'peak'
-            WHEN price < prev AND price < next THEN 'valley' END AS point_type
+       CASE WHEN price > prev AND price > next THEN 'peak'      -- 波峰
+            WHEN price < prev AND price < next THEN 'valley'     -- 波谷
+       END AS point_type
 FROM (
   SELECT dt, price,
          LAG(price)  OVER (ORDER BY dt) AS prev,
@@ -255,6 +308,8 @@ FROM (
 WHERE (price > prev AND price > next)
    OR (price < prev AND price < next);
 ```
+
+> 注意：相等（price = prev）时不算波峰/波谷；若业务允许“非严格”，把 `>`/`<` 改为 `>=`/`<=`。
 """,
     ),
     # ---------------- 留存与漏斗 ----------------
@@ -269,14 +324,20 @@ WHERE (price > prev AND price > next)
 **要求**：按天计算**次日留存率** = 当天活跃且次日仍活跃的用户数 / 当天活跃用户数。
 """,
         """
-## 求解思路
+| uid | dt |
+| --- | --- |
+| 1 | 2024-05-01 |
+| 1 | 2024-05-02 |
+| 2 | 2024-05-01 |
 
+> 期望：05-01 当日活跃 2 人，次日仍活跃 1 人（用户 1），次日留存率 = 0.5。
+""",
+        """
 1. 用登录表自连接：`b.dt` 比 `a.dt` 晚 1 天且为同一用户。
-2. 当天活跃用户数用 `COUNT(DISTINCT a.uid)`，次日仍活跃用 `COUNT(DISTINCT b.uid)`。
-3. 相除即得次日留存率（用 `LEFT JOIN` 保证当天无留存的日期也出现）。
-
-## 参考 SQL（Hive / Spark SQL）
-
+2. 当天活跃用 `COUNT(DISTINCT a.uid)`，次日仍活跃用 `COUNT(DISTINCT b.uid)`。
+3. 相除即得次日留存率（`LEFT JOIN` 保证当天无留存的日期也出现）。
+""",
+        """
 ```sql
 SELECT a.dt,
        COUNT(DISTINCT a.uid) AS dau,
@@ -284,9 +345,11 @@ SELECT a.dt,
        ROUND(COUNT(DISTINCT b.uid) / COUNT(DISTINCT a.uid), 4) AS retention_1d
 FROM login a
 LEFT JOIN login b
-  ON a.uid = b.uid AND DATEDIFF(b.dt, a.dt) = 1
+  ON a.uid = b.uid AND DATEDIFF(b.dt, a.dt) = 1   -- 次日
 GROUP BY a.dt;
 ```
+
+> 注意：务必用 `COUNT(DISTINCT ...)`，因为同一用户一天可能多次登录，直接 COUNT 会重复计数。
 """,
     ),
     _q(
@@ -300,14 +363,28 @@ GROUP BY a.dt;
 **要求**：按注册日期分组，计算新增用户的**第 1 / 3 / 7 日留存率**。
 """,
         """
-## 求解思路
+`user_reg`：
 
+| uid | reg_dt |
+| --- | --- |
+| 1 | 2024-05-01 |
+| 2 | 2024-05-01 |
+
+`login`：
+
+| uid | dt |
+| --- | --- |
+| 1 | 2024-05-02 |
+| 1 | 2024-05-08 |
+
+> 期望：05-01 新增 2 人；次日留存 0.5（用户 1），7 日留存 0.5（用户 1 于 05-08）。
+""",
+        """
 1. 以注册记录为基准 `LEFT JOIN` 登录记录。
 2. 用 `DATEDIFF(登录日, 注册日)` 判断是第几日活跃，配合 `COUNT(DISTINCT IF(...))` 做条件去重计数。
 3. 各留存数除以当日新增用户数。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT r.reg_dt,
        COUNT(DISTINCT r.uid) AS new_users,
@@ -321,6 +398,8 @@ FROM user_reg r
 LEFT JOIN login l ON r.uid = l.uid
 GROUP BY r.reg_dt;
 ```
+
+> 注意：`= 7` 指“注册后第 7 天当天活跃”；若要“7 日内活跃”改成 `BETWEEN 1 AND 7`。
 """,
     ),
     _q(
@@ -334,14 +413,22 @@ GROUP BY r.reg_dt;
 **要求**：统计三步漏斗的**去重人数**及相邻步骤的**转化率**。
 """,
         """
-## 求解思路
+| uid | event | event_time |
+| --- | --- | --- |
+| 1 | register | 2024-05-01 10:00 |
+| 1 | order | 2024-05-01 11:00 |
+| 1 | pay | 2024-05-01 12:00 |
+| 2 | register | 2024-05-01 09:00 |
+| 2 | order | 2024-05-01 09:30 |
 
+> 期望：注册 2 人、下单 2 人、支付 1 人；注册→下单 100%，下单→支付 50%。
+""",
+        """
 1. 用 `COUNT(DISTINCT IF(event=..., uid, NULL))` 分别统计各步去重人数。
 2. 相邻步骤人数相除得转化率。
-3. 若需严格时序（先注册后下单再支付），可先按 `uid` 聚合各事件的最早时间，再比较大小后计数。
-
-## 参考 SQL（Hive / Spark SQL）
-
+3. 若需严格时序（先注册后下单再支付），可先按 `uid` 聚合各事件最早时间再比较大小。
+""",
+        """
 ```sql
 SELECT
   COUNT(DISTINCT IF(event = 'register', uid, NULL)) AS step_register,
@@ -353,6 +440,8 @@ SELECT
         / COUNT(DISTINCT IF(event = 'order', uid, NULL)), 4) AS order_to_pay
 FROM events;
 ```
+
+> 注意：本写法只看“是否发生过”，不校验时间先后；严格漏斗需保证 register_time < order_time < pay_time。
 """,
     ),
     # ---------------- 分组 TopN 与排名 ----------------
@@ -367,13 +456,21 @@ FROM events;
 **要求**：取出**每个部门薪资最高的前 3 名**（并列名次都保留）。
 """,
         """
-## 求解思路
+| emp_id | dept_id | salary |
+| --- | --- | --- |
+| 1 | 10 | 30000 |
+| 2 | 10 | 25000 |
+| 3 | 10 | 25000 |
+| 4 | 10 | 20000 |
+| 5 | 20 | 40000 |
 
-1. 按部门分区、薪资降序，用 `DENSE_RANK` 计算名次（并列同名次，不跳号）。
-2. 过滤名次 `<= 3`。若并列不保留、严格取 3 人，可改用 `ROW_NUMBER`。
-
-## 参考 SQL（Hive / Spark SQL）
-
+> 期望：部门 10 取薪资前三档（30000、并列 25000、20000），并列 25000 都保留。
+""",
+        """
+1. 按部门分区、薪资降序，用 `DENSE_RANK` 计算名次（并列同名次、不跳号）。
+2. 过滤名次 `<= 3`。若并列不保留、严格取 3 人，改用 `ROW_NUMBER`。
+""",
+        """
 ```sql
 SELECT dept_id, emp_id, salary
 FROM (
@@ -383,6 +480,8 @@ FROM (
 ) t
 WHERE rk <= 3;
 ```
+
+> 注意：`ROW_NUMBER`（唯一序号，并列也只保留一个）/ `RANK`（并列跳号）/ `DENSE_RANK`（并列不跳号）语义不同，按需选择。
 """,
     ),
     _q(
@@ -396,21 +495,28 @@ WHERE rk <= 3;
 **要求**：取每个品类**销售额前 2 的商品**，并计算其销售额**占该品类总额的比例**。
 """,
         """
-## 求解思路
+| cat_id | sku_id | amount |
+| --- | --- | --- |
+| 1 | 101 | 500 |
+| 1 | 102 | 300 |
+| 1 | 103 | 200 |
+| 2 | 201 | 1000 |
 
+> 期望：品类 1 取 101（500，占 0.5）、102（300，占 0.3）；品类 2 取 201。
+""",
+        """
 1. 先按 `(cat_id, sku_id)` 汇总销售额。
 2. 用窗口 `SUM() OVER (PARTITION BY cat_id)` 得品类总额，`ROW_NUMBER()` 得品类内排名。
 3. 过滤排名 `<= 2`，用商品额 / 品类总额得占比。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT cat_id, sku_id, amount,
        ROUND(amount / cat_total, 4) AS ratio
 FROM (
   SELECT cat_id, sku_id, amount,
-         SUM(amount) OVER (PARTITION BY cat_id) AS cat_total,
-         ROW_NUMBER() OVER (PARTITION BY cat_id ORDER BY amount DESC) AS rn
+         SUM(amount) OVER (PARTITION BY cat_id) AS cat_total,               -- 品类总额
+         ROW_NUMBER() OVER (PARTITION BY cat_id ORDER BY amount DESC) AS rn -- 品类内排名
   FROM (
     SELECT cat_id, sku_id, SUM(amount) AS amount
     FROM sku_sales
@@ -419,6 +525,8 @@ FROM (
 ) t
 WHERE rn <= 2;
 ```
+
+> 注意：占比分母是“品类总额”而非“Top2 之和”；聚合与排名放在同一层子查询里可少扫一遍数据。
 """,
     ),
     _q(
@@ -432,13 +540,20 @@ WHERE rn <= 2;
 **要求**：取出**每门学科第 3 高分**对应的学生（并列第 3 都保留）。
 """,
         """
-## 求解思路
+| sid | subject | score |
+| --- | --- | --- |
+| A | math | 95 |
+| B | math | 90 |
+| C | math | 85 |
+| D | math | 80 |
 
+> 期望：math 第 3 名为学生 C（85）。
+""",
+        """
 1. 按学科分区、成绩降序用 `DENSE_RANK` 排名。
 2. 过滤名次等于 3 即可。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT subject, sid, score
 FROM (
@@ -448,6 +563,8 @@ FROM (
 ) t
 WHERE rk = 3;
 ```
+
+> 注意：用 `DENSE_RANK` 时若前面有并列，第 3 名可能有多人；题目要求“并列都保留”正合适。
 """,
     ),
     # ---------------- 行列转换 ----------------
@@ -462,13 +579,20 @@ WHERE rk = 3;
 **要求**：转成**每个学生一行**，三科成绩各占一列。
 """,
         """
-## 求解思路
+| sid | subject | score |
+| --- | --- | --- |
+| 1 | chinese | 80 |
+| 1 | math | 90 |
+| 1 | english | 70 |
+| 2 | chinese | 60 |
 
+> 期望：学生 1 → (chinese 80, math 90, english 70)；学生 2 → (chinese 60, 其余 NULL)。
+""",
+        """
 1. 按 `sid` 分组。
-2. 用 `MAX(IF(subject=..., score, NULL))` 把每一科的分数「挑」到对应列上。
-
-## 参考 SQL（Hive / Spark SQL）
-
+2. 用 `MAX(IF(subject=..., score, NULL))` 把每一科的分数“挑”到对应列上。
+""",
+        """
 ```sql
 SELECT sid,
        MAX(IF(subject = 'chinese', score, NULL)) AS chinese,
@@ -477,6 +601,8 @@ SELECT sid,
 FROM score
 GROUP BY sid;
 ```
+
+> 注意：用 `MAX` 而非 `SUM`，避免某学生同一科目有多条时被求和；缺考科目自然为 NULL。
 """,
     ),
     _q(
@@ -490,18 +616,25 @@ GROUP BY sid;
 **要求**：把标签**拆成每行一个**（uid, tag）。
 """,
         """
-## 求解思路
+| uid | tags |
+| --- | --- |
+| 1 | 数仓,实时,调优 |
+| 2 | SQL |
 
+> 期望：用户 1 拆成 3 行（数仓 / 实时 / 调优），用户 2 拆成 1 行（SQL）。
+""",
+        """
 1. `SPLIT(tags, ',')` 得到数组。
 2. `LATERAL VIEW EXPLODE(...)` 把数组炸开成多行。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT uid, tag
 FROM user_tags
 LATERAL VIEW EXPLODE(SPLIT(tags, ',')) t AS tag;
 ```
+
+> 注意：若某些行 tags 为空，`EXPLODE` 会丢掉该行；要保留可改用 `LATERAL VIEW OUTER EXPLODE`。
 """,
     ),
     _q(
@@ -515,23 +648,31 @@ LATERAL VIEW EXPLODE(SPLIT(tags, ',')) t AS tag;
 **要求**：把每个用户访问过的页面**按时间顺序**拼成路径字符串，如 `home>list>detail`。
 """,
         """
-## 求解思路
+| uid | page | view_time |
+| --- | --- | --- |
+| 1 | home | 2024-05-01 10:00 |
+| 1 | list | 2024-05-01 10:01 |
+| 1 | detail | 2024-05-01 10:02 |
 
-1. `COLLECT_LIST` 只在数据「有序进入 reducer」时才保序，
+> 期望：用户 1 → `home>list>detail`。
+""",
+        """
+1. `COLLECT_LIST` 只有在数据“有序进入 reducer”时才保序，
    因此先按 `DISTRIBUTE BY uid SORT BY uid, view_time` 排序。
 2. 再按 `uid` 分组，用 `CONCAT_WS('>', COLLECT_LIST(page))` 拼接。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT uid, CONCAT_WS('>', COLLECT_LIST(page)) AS path
 FROM (
   SELECT uid, page, view_time
   FROM page_view
-  DISTRIBUTE BY uid SORT BY uid, view_time
+  DISTRIBUTE BY uid SORT BY uid, view_time   -- 关键：保证进入聚合前已按时间有序
 ) t
 GROUP BY uid;
 ```
+
+> 注意：直接对未排序数据用 `COLLECT_LIST` 不保证顺序；必须先 `DISTRIBUTE BY + SORT BY`（或 Spark 里 `sort_array` + 结构体带时间戳）。
 """,
     ),
     # ---------------- 同比环比与累计 ----------------
@@ -546,24 +687,32 @@ GROUP BY uid;
 **要求**：按**月**汇总销售额，并计算**环比**（较上月）与**同比**（较去年同月）增长率。
 """,
         """
-## 求解思路
+| dt | amount |
+| --- | --- |
+| 2023-01-15 | 100 |
+| 2024-01-10 | 120 |
+| 2024-02-10 | 150 |
 
-1. 用 `SUBSTR(dt, 1, 7)` 取「年-月」聚合出月度销售额。
+> 期望：2024-02 环比 = 150/120−1 = 25%；2024-01 同比 = 120/100−1 = 20%。
+""",
+        """
+1. 用 `SUBSTR(dt, 1, 7)` 取“年-月”聚合出月度销售额。
 2. 按月份排序，`LAG(amount, 1)` 取上月、`LAG(amount, 12)` 取去年同月。
-3. 增长率 = 本期 / 上期 − 1。注意月份连续无缺失时 `LAG(…,12)` 才恰好对齐去年同月。
-
-## 参考 SQL（Hive / Spark SQL）
-
+3. 增长率 = 本期 / 上期 − 1。
+""",
+        """
 ```sql
 SELECT ym, amount,
-       ROUND(amount / LAG(amount, 1)  OVER (ORDER BY ym) - 1, 4) AS mom,
-       ROUND(amount / LAG(amount, 12) OVER (ORDER BY ym) - 1, 4) AS yoy
+       ROUND(amount / LAG(amount, 1)  OVER (ORDER BY ym) - 1, 4) AS mom,  -- 环比
+       ROUND(amount / LAG(amount, 12) OVER (ORDER BY ym) - 1, 4) AS yoy   -- 同比
 FROM (
   SELECT SUBSTR(dt, 1, 7) AS ym, SUM(amount) AS amount
   FROM sales
   GROUP BY SUBSTR(dt, 1, 7)
 ) m;
 ```
+
+> 注意：`LAG(...,12)` 默认“往前数 12 行”，只有月份连续无缺失时才恰好等于“去年同月”；有缺失月份时应改为按 `ym` 自连接去年同月。
 """,
     ),
     _q(
@@ -577,25 +726,33 @@ FROM (
 **要求**：按日期输出**累计销售额**（含当天及之前），以及累计额**占全期总额的比例**。
 """,
         """
-## 求解思路
+| dt | amount |
+| --- | --- |
+| 2024-05-01 | 100 |
+| 2024-05-02 | 200 |
+| 2024-05-03 | 300 |
 
+> 期望：累计 100 / 300 / 600；累计占比 ≈ 0.1667 / 0.5 / 1.0（全期总额 600）。
+""",
+        """
 1. 先按天汇总。
 2. `SUM() OVER (ORDER BY dt ROWS UNBOUNDED PRECEDING)` 得累计额；`SUM() OVER ()` 得全期总额。
 3. 两者相除得累计占比。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT dt, amount,
-       SUM(amount) OVER (ORDER BY dt ROWS UNBOUNDED PRECEDING) AS cum_amount,
+       SUM(amount) OVER (ORDER BY dt ROWS UNBOUNDED PRECEDING) AS cum_amount, -- 累计
        ROUND(SUM(amount) OVER (ORDER BY dt ROWS UNBOUNDED PRECEDING)
-             / SUM(amount) OVER (), 4) AS cum_ratio
+             / SUM(amount) OVER (), 4) AS cum_ratio                           -- 占全期比例
 FROM (
   SELECT dt, SUM(amount) AS amount
   FROM sales
   GROUP BY dt
 ) d;
 ```
+
+> 注意：`SUM() OVER ()` 空窗口表示全表总额；累计一定要写明帧 `ROWS UNBOUNDED PRECEDING`，否则默认帧在有排序时是 RANGE 会把同值行一起累计。
 """,
     ),
     _q(
@@ -609,19 +766,27 @@ FROM (
 **要求**：计算每一天的**近 7 日（含当天）移动平均**活跃数。
 """,
         """
-## 求解思路
+| dt | cnt |
+| --- | --- |
+| 2024-05-01 | 100 |
+| 2024-05-02 | 200 |
+| 2024-05-03 | 300 |
 
+> 期望：不足 7 天时按已有天数平均，如 05-03 的 ma7 = (100+200+300)/3 = 200。
+""",
+        """
 1. 按日期排序，用滑动窗口帧 `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW`。
 2. 对 `cnt` 求 `AVG` 即为近 7 日移动平均（起始不足 7 天时按实际天数计算）。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT dt, cnt,
        ROUND(AVG(cnt) OVER (ORDER BY dt
-             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS ma7
+             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS ma7  -- 含当天共 7 天
 FROM dau;
 ```
+
+> 注意：`6 PRECEDING` + 当前行 = 7 行；若日期有缺失（某天无数据），按“行”滑动会跨过缺口，需要先补齐日期维度。
 """,
     ),
     # ---------------- 聚合与去重 ----------------
@@ -636,20 +801,29 @@ FROM dau;
 **要求**：每门学科**去掉一个最高分和一个最低分**后求平均分。
 """,
         """
-## 求解思路
+| sid | subject | score |
+| --- | --- | --- |
+| A | math | 100 |
+| B | math | 60 |
+| C | math | 80 |
+| D | math | 90 |
 
+> 期望：去掉 100 和 60，(80+90)/2 = 85。
+""",
+        """
 1. 直接用聚合：总分减去最高最低，除以（人数 − 2）。
 2. 用 `HAVING COUNT(*) > 2` 排除人数不足的学科，避免除零。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT subject,
        ROUND((SUM(score) - MAX(score) - MIN(score)) / (COUNT(*) - 2), 2) AS avg_trimmed
 FROM score
 GROUP BY subject
-HAVING COUNT(*) > 2;
+HAVING COUNT(*) > 2;   -- 至少 3 人才有意义，避免除以 0
 ```
+
+> 注意：若最高/最低分有并列，这种写法只各去掉一个；若要去掉“所有并列极值”需另用排名过滤。
 """,
     ),
     _q(
@@ -663,22 +837,30 @@ HAVING COUNT(*) > 2;
 **要求**：求**每门学科的成绩中位数**。
 """,
         """
-## 求解思路
+| subject | score |
+| --- | --- |
+| math | 80 |
+| math | 90 |
+| math | 70 |
 
+> 期望：math 中位数 = 80。
+""",
+        """
 1. Hive/Spark 可直接用 `PERCENTILE`（精确，需整型）计算 0.5 分位。
 2. 大数据量下可用 `PERCENTILE_APPROX(score, 0.5)` 近似加速。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT subject,
        PERCENTILE(CAST(score AS BIGINT), 0.5) AS median
 FROM score
 GROUP BY subject;
 
--- 近似版本（大数据量）
+-- 大数据量近似版本（更快，略有误差）：
 -- SELECT subject, PERCENTILE_APPROX(score, 0.5) AS median FROM score GROUP BY subject;
 ```
+
+> 注意：`PERCENTILE` 要求入参为整型（用 `CAST(... AS BIGINT)`）；浮点数用 `PERCENTILE_APPROX`。
 """,
     ),
     _q(
@@ -692,13 +874,19 @@ GROUP BY subject;
 **要求**：取出每个用户**最早**和**最晚**的一笔订单，并标注是 `first` 还是 `last`。
 """,
         """
-## 求解思路
+| uid | order_id | order_time | amount |
+| --- | --- | --- | --- |
+| 1 | 1001 | 2024-05-01 10:00 | 50 |
+| 1 | 1002 | 2024-05-03 12:00 | 80 |
+| 1 | 1003 | 2024-05-05 09:00 | 30 |
 
+> 期望：首单 1001（first）、末单 1003（last）。
+""",
+        """
 1. 同一子查询里开两个 `ROW_NUMBER`：一个按时间升序、一个按时间降序。
-2. 过滤「升序第 1」或「降序第 1」，并用 `CASE` 标注首末。
-
-## 参考 SQL（Hive / Spark SQL）
-
+2. 过滤“升序第 1”或“降序第 1”，并用 `CASE` 标注首末。
+""",
+        """
 ```sql
 SELECT uid, order_id, order_time, amount,
        CASE WHEN rn_first = 1 THEN 'first' ELSE 'last' END AS flag
@@ -710,6 +898,8 @@ FROM (
 ) t
 WHERE rn_first = 1 OR rn_last = 1;
 ```
+
+> 注意：只有一笔订单的用户，该行 rn_first 与 rn_last 同时为 1，会被标为 first（`CASE` 先判 first）；如需同时体现可自行调整。
 """,
     ),
     _q(
@@ -723,13 +913,18 @@ WHERE rn_first = 1 OR rn_last = 1;
 **要求**：每个 `uid` 只保留 `update_time` **最新的一条**。
 """,
         """
-## 求解思路
+| uid | name | update_time |
+| --- | --- | --- |
+| 1 | 张三 | 2024-05-01 |
+| 1 | 张三丰 | 2024-05-03 |
 
+> 期望：保留 (1, 张三丰, 2024-05-03)。
+""",
+        """
 1. 按 `uid` 分区、`update_time` 降序用 `ROW_NUMBER` 打标。
-2. 取 `rn = 1` 即最新一条（这是数仓「取最新快照」的通用写法）。
-
-## 参考 SQL（Hive / Spark SQL）
-
+2. 取 `rn = 1` 即最新一条（数仓“取最新快照”的通用写法）。
+""",
+        """
 ```sql
 SELECT uid, name, update_time
 FROM (
@@ -739,6 +934,8 @@ FROM (
 ) t
 WHERE rn = 1;
 ```
+
+> 注意：若 update_time 可能相等，需再加一个稳定排序键（如自增 id）避免结果随机。
 """,
     ),
     # ---------------- 会话切分与行为路径 ----------------
@@ -748,20 +945,25 @@ WHERE rn = 1;
         "hard",
         "session,分段,时间差,窗口函数",
         """
-给定行为流水 `page_view(uid, view_time)`。定义：同一用户相邻两次行为**间隔超过 30 分钟**
-即切分为新会话。
+给定行为流水 `page_view(uid, view_time)`。定义：同一用户相邻两次行为**间隔超过 30 分钟**即切分为新会话。
 
 **要求**：求每个用户的**会话（session）数量**。
 """,
         """
-## 求解思路
+| uid | view_time |
+| --- | --- |
+| 1 | 2024-05-01 10:00:00 |
+| 1 | 2024-05-01 10:20:00 |
+| 1 | 2024-05-01 11:30:00 |
 
+> 期望：10:00 与 10:20 间隔 20 分钟同一会话；11:30 距上一条 70 分钟另起会话 → 共 2 个会话。
+""",
+        """
 1. 按用户、时间排序，用 `LAG` 取上一条行为时间。
-2. 若与上一条间隔 `> 1800` 秒（或本行是该用户首条，`LAG` 为 NULL）则开启新会话 `is_new=1`。
+2. 若与上一条间隔 `> 1800` 秒（或本行是该用户首条，`LAG` 为 NULL）则开启新会话。
 3. 对 `is_new` 累计求和得会话号，用户维度取最大会话号即为会话数。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT uid, MAX(session_id) AS session_cnt
 FROM (
@@ -773,13 +975,15 @@ FROM (
            CASE WHEN LAG(view_time) OVER (PARTITION BY uid ORDER BY view_time) IS NULL
                      OR UNIX_TIMESTAMP(view_time)
                         - UNIX_TIMESTAMP(LAG(view_time) OVER (PARTITION BY uid ORDER BY view_time))
-                        > 1800
+                        > 1800                        -- 间隔 > 30 分钟
                 THEN 1 ELSE 0 END AS is_new
     FROM page_view
   ) t
 ) s
 GROUP BY uid;
 ```
+
+> 注意：首条行为的 `LAG` 为 NULL，必须显式判 NULL 记为新会话，否则该用户会少算一个 session。
 """,
     ),
     # ---------------- 同时在线与并发 ----------------
@@ -794,27 +998,34 @@ GROUP BY uid;
 **要求**：求该直播间**历史最大同时在线人数**。
 """,
         """
-## 求解思路
+| uid | enter_time | leave_time |
+| --- | --- | --- |
+| 1 | 2024-05-01 10:00 | 2024-05-01 10:30 |
+| 2 | 2024-05-01 10:10 | 2024-05-01 10:40 |
+| 3 | 2024-05-01 10:35 | 2024-05-01 10:50 |
 
+> 期望：10:10~10:30 用户 1、2 同时在线，最大同时在线 = 2。
+""",
+        """
 1. 把每条观看拆成两个事件：进入 `+1`、离开 `-1`。
-2. 按时间排序做前缀和（在线人数随事件累加）；同一时刻**先进后出**
-   （`+1` 排在 `-1` 前，避免瞬时低估）。
+2. 按时间排序做前缀和（在线人数随事件累加）；同一时刻**先进后出**（`+1` 排在 `-1` 前，避免瞬时低估）。
 3. 前缀和的最大值即最大同时在线人数。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT MAX(online) AS max_online
 FROM (
   SELECT SUM(delta) OVER (ORDER BY ts, delta DESC
-                          ROWS UNBOUNDED PRECEDING) AS online
+                          ROWS UNBOUNDED PRECEDING) AS online   -- 前缀和 = 当前在线数
   FROM (
-    SELECT enter_time AS ts,  1 AS delta FROM live_session
+    SELECT enter_time AS ts,  1 AS delta FROM live_session      -- 进入 +1
     UNION ALL
-    SELECT leave_time AS ts, -1 AS delta FROM live_session
+    SELECT leave_time AS ts, -1 AS delta FROM live_session      -- 离开 -1
   ) e
 ) t;
 ```
+
+> 注意：同一时刻的排序 `ORDER BY ts, delta DESC` 让 +1 先于 -1，保证边界时刻不低估；若业务定义“离开即不在线”，可反过来。
 """,
     ),
     # ---------------- 图与关系（好友） ----------------
@@ -829,22 +1040,31 @@ FROM (
 **要求**：计算任意两个用户的**共同好友数**，取共同好友最多的 Top 10 用户对。
 """,
         """
-## 求解思路
+| uid | fid |
+| --- | --- |
+| 1 | 100 |
+| 2 | 100 |
+| 1 | 200 |
+| 2 | 200 |
 
+> 期望：用户对 (1, 2) 共同好友 100、200 共 2 个。
+""",
+        """
 1. 对好友表按同一个好友 `fid` 自连接：两个不同用户共享同一个 `fid` 即拥有一个共同好友。
 2. 用 `a.uid < b.uid` 去重（避免 (A,B) 与 (B,A) 重复、并排除自己）。
 3. 按用户对分组计数，排序取 TopN。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT a.uid AS u1, b.uid AS u2, COUNT(*) AS common_friends
 FROM friend a
-JOIN friend b ON a.fid = b.fid AND a.uid < b.uid
+JOIN friend b ON a.fid = b.fid AND a.uid < b.uid   -- 同一好友；u1<u2 去重
 GROUP BY a.uid, b.uid
 ORDER BY common_friends DESC
 LIMIT 10;
 ```
+
+> 注意：`a.uid < b.uid` 既避免自连接产生 (A,A)，又保证每对只出现一次。
 """,
     ),
     _q(
@@ -858,21 +1078,29 @@ LIMIT 10;
 **要求**：找出所有**互相关注**的用户对。
 """,
         """
-## 求解思路
+| follower | followee |
+| --- | --- |
+| 1 | 2 |
+| 2 | 1 |
+| 1 | 3 |
 
+> 期望：用户对 (1, 2) 互相关注；(1, 3) 只是单向。
+""",
+        """
 1. 关注表自连接：若存在 `(A→B)` 且 `(B→A)` 两条记录，则 A、B 互相关注。
 2. 连接条件为 `a.follower = b.followee AND a.followee = b.follower`。
 3. 用 `a.follower < a.followee` 去重每对只留一条。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT a.follower AS u1, a.followee AS u2
 FROM follow a
 JOIN follow b
   ON a.follower = b.followee AND a.followee = b.follower
-WHERE a.follower < a.followee;
+WHERE a.follower < a.followee;   -- 每对只保留一条
 ```
+
+> 注意：不加 `follower < followee` 会得到 (1,2) 与 (2,1) 两条重复结果。
 """,
     ),
     # ---------------- 比率与实验指标 ----------------
@@ -887,21 +1115,29 @@ WHERE a.follower < a.followee;
 **要求**：计算**复购率** = 复购用户数 / 有过下单的用户数。
 """,
         """
-## 求解思路
+| uid | order_date |
+| --- | --- |
+| 1 | 2024-05-01 |
+| 1 | 2024-05-03 |
+| 2 | 2024-05-02 |
 
+> 期望：用户 1 下单 2 次（复购），用户 2 下单 1 次；复购率 = 1/2 = 0.5。
+""",
+        """
 1. 先按 `uid` 统计下单次数。
 2. 分子为下单次数 ≥ 2 的用户数，分母为全部下单用户数，相除即复购率。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT ROUND(COUNT(IF(order_cnt >= 2, uid, NULL)) / COUNT(uid), 4) AS repurchase_rate
 FROM (
-  SELECT uid, COUNT(*) AS order_cnt
+  SELECT uid, COUNT(*) AS order_cnt   -- 每个用户下单次数
   FROM orders
   GROUP BY uid
 ) t;
 ```
+
+> 注意：若按“订单去重日期”定义复购（一天多单只算一次），先对 `(uid, order_date)` 去重再统计。
 """,
     ),
     _q(
@@ -916,15 +1152,22 @@ FROM (
 **要求**：计算**每个实验组的转化率**（转化用户数 / 参与用户数）。
 """,
         """
-## 求解思路
+| uid | group_name | is_convert |
+| --- | --- | --- |
+| 1 | A | 1 |
+| 2 | A | 0 |
+| 3 | B | 1 |
+| 4 | B | 1 |
 
+> 期望：A 组转化率 = 1/2 = 0.5；B 组 = 2/2 = 1.0。
+""",
+        """
 1. 按 `group_name` 分组。
 2. 参与用户数用 `COUNT(DISTINCT uid)`；转化用户数用
    `COUNT(DISTINCT IF(is_convert = 1, uid, NULL))`。
 3. 相除得各组转化率，可直接对比 A/B 组差异。
-
-## 参考 SQL（Hive / Spark SQL）
-
+""",
+        """
 ```sql
 SELECT group_name,
        COUNT(DISTINCT uid) AS users,
@@ -934,6 +1177,8 @@ SELECT group_name,
 FROM ab_log
 GROUP BY group_name;
 ```
+
+> 注意：用 `COUNT(DISTINCT uid)` 而非 `COUNT(*)`，避免同一用户多条日志导致分母虚高。
 """,
     ),
 ]
@@ -965,31 +1210,42 @@ async def seed_sql_bank() -> None:
     async with SessionLocal() as db:
         slug_to_id = await _ensure_categories(db)
 
-        existing_titles = set(
-            (await db.execute(select(SqlQuestion.title))).scalars().all()
-        )
+        existing_by_title = {
+            row.title: row
+            for row in (await db.execute(select(SqlQuestion))).scalars().all()
+        }
 
         inserted = 0
+        updated = 0
         for q in QUESTIONS:
-            if q["title"] in existing_titles:
-                continue
-            db.add(
-                SqlQuestion(
-                    category_id=slug_to_id[q["cat"]],
-                    title=q["title"],
-                    difficulty=q["difficulty"],
-                    prompt_md=q["prompt_md"],
-                    answer_md=q["answer_md"],
-                    tags=q["tags"],
-                    status="published",
+            row = existing_by_title.get(q["title"])
+            if row is None:
+                db.add(
+                    SqlQuestion(
+                        category_id=slug_to_id[q["cat"]],
+                        title=q["title"],
+                        difficulty=q["difficulty"],
+                        prompt_md=q["prompt_md"],
+                        answer_md=q["answer_md"],
+                        tags=q["tags"],
+                        status="published",
+                    )
                 )
-            )
-            inserted += 1
+                inserted += 1
+            else:
+                # upsert：更新正文，便于迭代题目内容。
+                row.category_id = slug_to_id[q["cat"]]
+                row.difficulty = q["difficulty"]
+                row.prompt_md = q["prompt_md"]
+                row.answer_md = q["answer_md"]
+                row.tags = q["tags"]
+                row.status = "published"
+                updated += 1
 
         await db.commit()
         print(
-            f"SQL 题库灌入完成：题型 {len(slug_to_id)} 个，本次新增题目 {inserted} 道"
-            f"（已存在则跳过，共 {len(QUESTIONS)} 道）。"
+            f"SQL 题库灌入完成：题型 {len(slug_to_id)} 个；新增 {inserted} 道、更新 {updated} 道"
+            f"（共 {len(QUESTIONS)} 道）。"
         )
 
 

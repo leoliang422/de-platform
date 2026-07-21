@@ -7,13 +7,17 @@ import { FolderManager } from "@/components/folder-manager";
 import { RequireAuth } from "@/components/guard";
 import {
   adminApprove,
+  adminGetUserAccess,
   adminListSubmissions,
   adminListUsers,
   adminReject,
+  adminSetModuleAccess,
+  adminSetProjectAccess,
   adminUpdateUser,
   getAccessToken,
   type AdminSubmission,
   type AdminUser,
+  type AdminUserAccess,
 } from "@/lib/api";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -189,6 +193,7 @@ function UserManager() {
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accessUser, setAccessUser] = useState<AdminUser | null>(null);
 
   const load = useCallback((query: string) => {
     const token = getAccessToken();
@@ -304,12 +309,164 @@ function UserManager() {
                     >
                       {u.role === "admin" ? "降为用户" : "设为管理员"}
                     </button>
+                    <button
+                      onClick={() => setAccessUser(u)}
+                      className="text-xs text-brand-600 hover:underline"
+                    >
+                      权限
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {accessUser && (
+        <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />
+      )}
+    </div>
+  );
+}
+
+function AccessPanel({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const [access, setAccess] = useState<AdminUserAccess | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    adminGetUserAccess(token, user.id)
+      .then(setAccess)
+      .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
+  }, [user.id]);
+
+  const isAdmin = user.role === "admin";
+
+  async function toggleModule(module: string, grant: boolean) {
+    const token = getAccessToken();
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setAccess(await adminSetModuleAccess(token, user.id, module, grant));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleProject(projectId: number, grant: boolean) {
+    const token = getAccessToken();
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setAccess(await adminSetProjectAccess(token, user.id, projectId, grant));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">
+              权限范围 · {user.nickname}
+            </h3>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            ✕
+          </button>
+        </div>
+
+        {isAdmin && (
+          <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-xs text-brand-700">
+            该用户是管理员，默认拥有全部权限（无限查看，不受额度限制）。
+          </p>
+        )}
+        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        {!access ? (
+          <p className="text-sm text-slate-400">加载中…</p>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-slate-700">模块解锁</h4>
+              <div className="space-y-2">
+                {access.modules.map((m) => (
+                  <div
+                    key={m.module}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
+                  >
+                    <span className="text-sm text-slate-700">
+                      {m.label}
+                      <span
+                        className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
+                          m.unlocked
+                            ? "bg-green-100 text-green-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {m.unlocked ? "已解锁" : "未解锁"}
+                      </span>
+                    </span>
+                    <button
+                      disabled={busy || isAdmin}
+                      onClick={() => toggleModule(m.module, !m.unlocked)}
+                      className="text-xs text-brand-600 hover:underline disabled:opacity-40"
+                    >
+                      {m.unlocked ? "收回" : "赋予"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-slate-700">项目解锁</h4>
+              {access.projects.length === 0 ? (
+                <p className="text-xs text-slate-400">暂无需要积分解锁的项目。</p>
+              ) : (
+                <div className="space-y-2">
+                  {access.projects.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                      <span className="text-sm text-slate-700">
+                        {p.title}
+                        <span
+                          className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
+                            p.unlocked
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {p.unlocked ? "已解锁" : "未解锁"}
+                        </span>
+                      </span>
+                      <button
+                        disabled={busy || isAdmin}
+                        onClick={() => toggleProject(p.id, !p.unlocked)}
+                        className="text-xs text-brand-600 hover:underline disabled:opacity-40"
+                      >
+                        {p.unlocked ? "收回" : "赋予"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

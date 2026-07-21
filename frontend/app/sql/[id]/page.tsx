@@ -64,6 +64,8 @@ export default function SqlDetailPage({
     }
   }
 
+  const isAdmin = user?.role === "admin";
+
   return (
     <div>
       <BackLink href="/sql" label="返回 SQL 题库" />
@@ -73,31 +75,58 @@ export default function SqlDetailPage({
         <Loading />
       ) : (
         <AnnotatedReader contentType="sql" contentId={item.id}>
-          <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
-          <h2 className="mb-2 text-sm font-semibold text-slate-500">题目</h2>
+          {/* 标题区 */}
+          <header className="mb-6 border-b border-slate-200 pb-4">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{item.title}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded px-2 py-0.5 text-xs font-medium ${
+                  DIFFICULTY[item.difficulty]?.cls ?? "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {DIFFICULTY[item.difficulty]?.label ?? item.difficulty}
+              </span>
+              {item.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
+                >
+                  #{t}
+                </span>
+              ))}
+              {isAdmin && (
+                <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">
+                  管理员 · 无限查看
+                </span>
+              )}
+            </div>
+          </header>
+
+          {/* 一、题目描述（含示例表与数据）——正文已含「## 一、题目描述」标题 */}
           <Prose>{item.prompt_md}</Prose>
 
-          <div className="my-4">
+          {/* 二、三：求解思路 / 求解 SQL —— 门控展示 */}
+          <div className="my-5">
             {!user && item.answer_locked ? (
               <p className="text-sm text-slate-500">
                 <Link href="/login" className="text-brand-600 hover:underline">
                   登录
                 </Link>
-                后可查看答案（每个模块免费查看 {item.free_limit} 条）。
+                后可查看解答（每个模块免费查看 {item.free_limit} 条）。
               </p>
             ) : quotaExhausted ? null : (
               <button
                 onClick={handleShowAnswer}
                 disabled={busy}
-                className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
               >
                 {answerReady
                   ? showAnswer
-                    ? "隐藏答案"
-                    : "显示答案"
+                    ? "收起解答"
+                    : "查看求解思路与 SQL"
                   : item.module_unlocked
-                    ? "显示答案"
-                    : `显示答案（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
+                    ? "查看求解思路与 SQL"
+                    : `查看解答（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
               </button>
             )}
             {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
@@ -113,12 +142,7 @@ export default function SqlDetailPage({
             />
           )}
 
-          {answerReady && showAnswer && (
-            <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-500">参考答案</h2>
-              <Prose>{item.answer_md ?? ""}</Prose>
-            </>
-          )}
+          {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
 
           <ContentInteractions contentType="sql" contentId={item.id} />
         </AnnotatedReader>
@@ -126,3 +150,9 @@ export default function SqlDetailPage({
     </div>
   );
 }
+
+const DIFFICULTY: Record<string, { label: string; cls: string }> = {
+  easy: { label: "简单", cls: "bg-green-100 text-green-700" },
+  medium: { label: "中等", cls: "bg-amber-100 text-amber-700" },
+  hard: { label: "困难", cls: "bg-red-100 text-red-700" },
+};

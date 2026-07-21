@@ -150,6 +150,15 @@ class AccessService:
                 free_limit=self.free_limit,
                 unlock_points=price,
             )
+        # 管理员不受免费额度限制，视为已解锁（无限查看）。
+        if user.role == "admin":
+            return ModuleAccessOut(
+                module=module,
+                unlocked=True,
+                free_used=0,
+                free_limit=self.free_limit,
+                unlock_points=price,
+            )
         return ModuleAccessOut(
             module=module,
             unlocked=await self._module_unlocked(user.id, module),

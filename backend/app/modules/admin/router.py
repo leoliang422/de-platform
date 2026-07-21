@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_admin
+from app.modules.access.models import MODULE_UNLOCK_MARKER, ModuleAccessLog
 from app.modules.admin.schemas import (
     AdminSubmissionOut,
+    AdminUserAccessOut,
     AdminUserOut,
     AdminUserUpdate,
+    ModuleAccessItem,
+    ProjectAccessItem,
 )
 from app.modules.catalog import service as catalog_service
 from app.modules.catalog.repository import CategoryRepository
@@ -18,7 +22,9 @@ from app.modules.catalog.schemas import (
     CategoryUpdate,
     FolderTree,
 )
+from app.modules.payment.models import Entitlement
 from app.modules.points.models import PointLedger
+from app.modules.projects.models import Project
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import ApproveIn, RejectIn, SubmissionOut
 from app.modules.submissions.service import SubmissionService
@@ -156,3 +162,159 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return AdminUserOut.model_validate(user)
+
+
+# ---- 用户权限范围（模块解锁 / 项目解锁）----
+_MODULE_LABELS = {"sql": "SQL 题库", "interview": "面经"}
+
+
+async def _load_user_access(db: AsyncSession, user: User) -> AdminUserAccessOut:
+    is_admin = user.role == "admin"
+
+    unlocked_modules = set(
+        (
+            await db.execute(
+                select(ModuleAccessLog.module).where(
+                    ModuleAccessLog.user_id == user.id,
+                    ModuleAccessLog.item_id == MODULE_UNLOCK_MARKER,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    modules = [
+        ModuleAccessItem(
+            module=m, label=label, unlocked=is_admin or m in unlocked_modules
+        )
+        for m, label in _MODULE_LABELS.items()
+    ]
+
+    unlocked_projects = set(
+        (
+            await db.execute(
+                select(Entitlement.content_id).where(
+                    Entitlement.user_id == user.id,
+                    Entitlement.content_type == "project",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    project_rows = (
+        await db.execute(
+            select(Project)
+            .where(Project.status == "published", Project.access_type != "free")
+            .order_by(Project.id.desc())
+        )
+    ).scalars().all()
+    projects = [
+        ProjectAccessItem(
+            id=p.id,
+            title=p.title,
+            access_type=p.access_type,
+            unlocked=is_admin or p.id in unlocked_projects,
+        )
+        for p in project_rows
+    ]
+    return AdminUserAccessOut(user_id=user.id, modules=modules, projects=projects)
+
+
+async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    return user
+
+
+@router.get("/users/{user_id}/access", response_model=AdminUserAccessOut)
+async def get_user_access(
+    user_id: int, db: AsyncSession = Depends(get_db)
+) -> AdminUserAccessOut:
+    user = await _get_user_or_404(db, user_id)
+    return await _load_user_access(db, user)
+
+
+@router.put("/users/{user_id}/access/module/{module}", response_model=AdminUserAccessOut)
+async def grant_module_access(
+    user_id: int, module: str, db: AsyncSession = Depends(get_db)
+) -> AdminUserAccessOut:
+    if module not in _MODULE_LABELS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模块不存在")
+    user = await _get_user_or_404(db, user_id)
+    exists = await db.scalar(
+        select(ModuleAccessLog.id).where(
+            ModuleAccessLog.user_id == user.id,
+            ModuleAccessLog.module == module,
+            ModuleAccessLog.item_id == MODULE_UNLOCK_MARKER,
+        )
+    )
+    if exists is None:
+        db.add(
+            ModuleAccessLog(user_id=user.id, module=module, item_id=MODULE_UNLOCK_MARKER)
+        )
+        await db.commit()
+    return await _load_user_access(db, user)
+
+
+@router.delete("/users/{user_id}/access/module/{module}", response_model=AdminUserAccessOut)
+async def revoke_module_access(
+    user_id: int, module: str, db: AsyncSession = Depends(get_db)
+) -> AdminUserAccessOut:
+    if module not in _MODULE_LABELS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模块不存在")
+    user = await _get_user_or_404(db, user_id)
+    await db.execute(
+        delete(ModuleAccessLog).where(
+            ModuleAccessLog.user_id == user.id,
+            ModuleAccessLog.module == module,
+            ModuleAccessLog.item_id == MODULE_UNLOCK_MARKER,
+        )
+    )
+    await db.commit()
+    return await _load_user_access(db, user)
+
+
+@router.put("/users/{user_id}/access/project/{project_id}", response_model=AdminUserAccessOut)
+async def grant_project_access(
+    user_id: int, project_id: int, db: AsyncSession = Depends(get_db)
+) -> AdminUserAccessOut:
+    user = await _get_user_or_404(db, user_id)
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目不存在")
+    exists = await db.scalar(
+        select(Entitlement.id).where(
+            Entitlement.user_id == user.id,
+            Entitlement.content_type == "project",
+            Entitlement.content_id == project_id,
+        )
+    )
+    if exists is None:
+        db.add(
+            Entitlement(
+                user_id=user.id,
+                content_type="project",
+                content_id=project_id,
+                source="admin",
+            )
+        )
+        await db.commit()
+    return await _load_user_access(db, user)
+
+
+@router.delete("/users/{user_id}/access/project/{project_id}", response_model=AdminUserAccessOut)
+async def revoke_project_access(
+    user_id: int, project_id: int, db: AsyncSession = Depends(get_db)
+) -> AdminUserAccessOut:
+    user = await _get_user_or_404(db, user_id)
+    await db.execute(
+        delete(Entitlement).where(
+            Entitlement.user_id == user.id,
+            Entitlement.content_type == "project",
+            Entitlement.content_id == project_id,
+        )
+    )
+    await db.commit()
+    return await _load_user_access(db, user)

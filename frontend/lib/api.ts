@@ -992,6 +992,54 @@ export function adminUpdateUser(
   });
 }
 
+// ---- Admin 用户权限范围（模块解锁 / 项目解锁）----
+export interface AdminModuleAccess {
+  module: string;
+  label: string;
+  unlocked: boolean;
+}
+
+export interface AdminProjectAccess {
+  id: number;
+  title: string;
+  access_type: string;
+  unlocked: boolean;
+}
+
+export interface AdminUserAccess {
+  user_id: number;
+  modules: AdminModuleAccess[];
+  projects: AdminProjectAccess[];
+}
+
+export function adminGetUserAccess(token: string, userId: number): Promise<AdminUserAccess> {
+  return authRequest<AdminUserAccess>(`/admin/users/${userId}/access`, token);
+}
+
+export function adminSetModuleAccess(
+  token: string,
+  userId: number,
+  module: string,
+  grant: boolean,
+): Promise<AdminUserAccess> {
+  return authRequest<AdminUserAccess>(`/admin/users/${userId}/access/module/${module}`, token, {
+    method: grant ? "PUT" : "DELETE",
+  });
+}
+
+export function adminSetProjectAccess(
+  token: string,
+  userId: number,
+  projectId: number,
+  grant: boolean,
+): Promise<AdminUserAccess> {
+  return authRequest<AdminUserAccess>(
+    `/admin/users/${userId}/access/project/${projectId}`,
+    token,
+    { method: grant ? "PUT" : "DELETE" },
+  );
+}
+
 // ---- Payment / Entitlements ----
 // 仅项目采用单条积分解锁（八股免费；SQL/面经为模块级积分门控）。
 export type PayableType = "project";

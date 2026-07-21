@@ -37,3 +37,24 @@ class AdminUserUpdate(BaseModel):
     set_points: int | None = None
     delta_points: int | None = None
     reason: str | None = None
+
+
+class ModuleAccessItem(BaseModel):
+    module: str  # sql | interview
+    label: str
+    unlocked: bool
+
+
+class ProjectAccessItem(BaseModel):
+    id: int
+    title: str
+    access_type: str
+    unlocked: bool
+
+
+class AdminUserAccessOut(BaseModel):
+    """某用户的权限范围：模块级解锁 + 项目解锁清单。"""
+
+    user_id: int
+    modules: list[ModuleAccessItem]
+    projects: list[ProjectAccessItem]
