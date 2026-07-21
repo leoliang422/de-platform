@@ -29,14 +29,18 @@ from app.core.database import SessionLocal
 from app.modules.catalog.models import Category
 from app.modules.sql_bank.models import SqlQuestion
 
-# 题型分类（section='sql'）：合并相似题到同一题型。
+# 题型分类（section='sql'）：合并相似题到同一题型，覆盖数据开发常见 SQL 面试题型。
 CATEGORIES: list[dict[str, object]] = [
-    {"slug": "continuous", "name": "连续与区间", "order": 1},
+    {"slug": "continuous", "name": "连续 · 区间 · 序列", "order": 1},
     {"slug": "retention-funnel", "name": "留存与漏斗", "order": 2},
     {"slug": "group-topn", "name": "分组 TopN 与排名", "order": 3},
     {"slug": "pivot", "name": "行列转换", "order": 4},
     {"slug": "trend-cumulative", "name": "同比环比与累计", "order": 5},
     {"slug": "aggregate", "name": "聚合与去重", "order": 6},
+    {"slug": "session-path", "name": "会话切分与行为路径", "order": 7},
+    {"slug": "concurrency", "name": "同时在线与并发", "order": 8},
+    {"slug": "graph-relation", "name": "图与关系（好友）", "order": 9},
+    {"slug": "ratio-metric", "name": "比率与实验指标", "order": 10},
 ]
 
 
@@ -216,6 +220,40 @@ FROM (
   GROUP BY uid, seg_id
 ) s
 GROUP BY uid;
+```
+""",
+    ),
+    _q(
+        "continuous",
+        "识别股价的波峰与波谷",
+        "medium",
+        "序列,相邻比较,lag,lead",
+        """
+给定股价表 `stock(dt, price)`（每天一条）。
+
+**要求**：找出所有**波峰**（比前一天、后一天都高）和**波谷**（比前一天、后一天都低）的日期。
+""",
+        """
+## 求解思路
+
+1. 用 `LAG` 取前一天价格、`LEAD` 取后一天价格。
+2. 当天价格同时大于前后即为波峰，同时小于前后即为波谷。
+3. 首尾两天没有完整前后邻居，天然不会命中（`LAG/LEAD` 为 NULL）。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT dt, price,
+       CASE WHEN price > prev AND price > next THEN 'peak'
+            WHEN price < prev AND price < next THEN 'valley' END AS point_type
+FROM (
+  SELECT dt, price,
+         LAG(price)  OVER (ORDER BY dt) AS prev,
+         LEAD(price) OVER (ORDER BY dt) AS next
+  FROM stock
+) t
+WHERE (price > prev AND price > next)
+   OR (price < prev AND price < next);
 ```
 """,
     ),
@@ -703,6 +741,201 @@ WHERE rn = 1;
 ```
 """,
     ),
+    # ---------------- 会话切分与行为路径 ----------------
+    _q(
+        "session-path",
+        "按 30 分钟间隔切分会话（Session）",
+        "hard",
+        "session,分段,时间差,窗口函数",
+        """
+给定行为流水 `page_view(uid, view_time)`。定义：同一用户相邻两次行为**间隔超过 30 分钟**
+即切分为新会话。
+
+**要求**：求每个用户的**会话（session）数量**。
+""",
+        """
+## 求解思路
+
+1. 按用户、时间排序，用 `LAG` 取上一条行为时间。
+2. 若与上一条间隔 `> 1800` 秒（或本行是该用户首条，`LAG` 为 NULL）则开启新会话 `is_new=1`。
+3. 对 `is_new` 累计求和得会话号，用户维度取最大会话号即为会话数。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT uid, MAX(session_id) AS session_cnt
+FROM (
+  SELECT uid,
+         SUM(is_new) OVER (PARTITION BY uid ORDER BY view_time
+                           ROWS UNBOUNDED PRECEDING) AS session_id
+  FROM (
+    SELECT uid, view_time,
+           CASE WHEN LAG(view_time) OVER (PARTITION BY uid ORDER BY view_time) IS NULL
+                     OR UNIX_TIMESTAMP(view_time)
+                        - UNIX_TIMESTAMP(LAG(view_time) OVER (PARTITION BY uid ORDER BY view_time))
+                        > 1800
+                THEN 1 ELSE 0 END AS is_new
+    FROM page_view
+  ) t
+) s
+GROUP BY uid;
+```
+""",
+    ),
+    # ---------------- 同时在线与并发 ----------------
+    _q(
+        "concurrency",
+        "直播间历史最大同时在线人数",
+        "hard",
+        "并发,事件流,前缀和,扫描线",
+        """
+给定观看记录 `live_session(uid, enter_time, leave_time)`。
+
+**要求**：求该直播间**历史最大同时在线人数**。
+""",
+        """
+## 求解思路
+
+1. 把每条观看拆成两个事件：进入 `+1`、离开 `-1`。
+2. 按时间排序做前缀和（在线人数随事件累加）；同一时刻**先进后出**
+   （`+1` 排在 `-1` 前，避免瞬时低估）。
+3. 前缀和的最大值即最大同时在线人数。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT MAX(online) AS max_online
+FROM (
+  SELECT SUM(delta) OVER (ORDER BY ts, delta DESC
+                          ROWS UNBOUNDED PRECEDING) AS online
+  FROM (
+    SELECT enter_time AS ts,  1 AS delta FROM live_session
+    UNION ALL
+    SELECT leave_time AS ts, -1 AS delta FROM live_session
+  ) e
+) t;
+```
+""",
+    ),
+    # ---------------- 图与关系（好友） ----------------
+    _q(
+        "graph-relation",
+        "共同好友数最多的用户对 TopN",
+        "medium",
+        "自连接,共同好友,图关系",
+        """
+给定好友表 `friend(uid, fid)`，表示 `uid` 与 `fid` 是好友。
+
+**要求**：计算任意两个用户的**共同好友数**，取共同好友最多的 Top 10 用户对。
+""",
+        """
+## 求解思路
+
+1. 对好友表按同一个好友 `fid` 自连接：两个不同用户共享同一个 `fid` 即拥有一个共同好友。
+2. 用 `a.uid < b.uid` 去重（避免 (A,B) 与 (B,A) 重复、并排除自己）。
+3. 按用户对分组计数，排序取 TopN。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT a.uid AS u1, b.uid AS u2, COUNT(*) AS common_friends
+FROM friend a
+JOIN friend b ON a.fid = b.fid AND a.uid < b.uid
+GROUP BY a.uid, b.uid
+ORDER BY common_friends DESC
+LIMIT 10;
+```
+""",
+    ),
+    _q(
+        "graph-relation",
+        "互相关注的用户对",
+        "medium",
+        "自连接,双向关系,图关系",
+        """
+给定关注表 `follow(follower, followee)`，表示 `follower` 关注了 `followee`（单向）。
+
+**要求**：找出所有**互相关注**的用户对。
+""",
+        """
+## 求解思路
+
+1. 关注表自连接：若存在 `(A→B)` 且 `(B→A)` 两条记录，则 A、B 互相关注。
+2. 连接条件为 `a.follower = b.followee AND a.followee = b.follower`。
+3. 用 `a.follower < a.followee` 去重每对只留一条。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT a.follower AS u1, a.followee AS u2
+FROM follow a
+JOIN follow b
+  ON a.follower = b.followee AND a.followee = b.follower
+WHERE a.follower < a.followee;
+```
+""",
+    ),
+    # ---------------- 比率与实验指标 ----------------
+    _q(
+        "ratio-metric",
+        "用户复购率",
+        "medium",
+        "复购率,比率指标,条件计数",
+        """
+给定订单表 `orders(uid, order_date)`。定义**复购用户**为下单次数 ≥ 2 的用户。
+
+**要求**：计算**复购率** = 复购用户数 / 有过下单的用户数。
+""",
+        """
+## 求解思路
+
+1. 先按 `uid` 统计下单次数。
+2. 分子为下单次数 ≥ 2 的用户数，分母为全部下单用户数，相除即复购率。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT ROUND(COUNT(IF(order_cnt >= 2, uid, NULL)) / COUNT(uid), 4) AS repurchase_rate
+FROM (
+  SELECT uid, COUNT(*) AS order_cnt
+  FROM orders
+  GROUP BY uid
+) t;
+```
+""",
+    ),
+    _q(
+        "ratio-metric",
+        "AB 实验各组转化率对比",
+        "medium",
+        "AB实验,转化率,分组聚合",
+        """
+给定实验日志 `ab_log(uid, group_name, is_convert)`，`group_name` 为实验组（如 `A` / `B`），
+`is_convert` 为该用户是否转化（1/0）。
+
+**要求**：计算**每个实验组的转化率**（转化用户数 / 参与用户数）。
+""",
+        """
+## 求解思路
+
+1. 按 `group_name` 分组。
+2. 参与用户数用 `COUNT(DISTINCT uid)`；转化用户数用
+   `COUNT(DISTINCT IF(is_convert = 1, uid, NULL))`。
+3. 相除得各组转化率，可直接对比 A/B 组差异。
+
+## 参考 SQL（Hive / Spark SQL）
+
+```sql
+SELECT group_name,
+       COUNT(DISTINCT uid) AS users,
+       COUNT(DISTINCT IF(is_convert = 1, uid, NULL)) AS converts,
+       ROUND(COUNT(DISTINCT IF(is_convert = 1, uid, NULL))
+             / COUNT(DISTINCT uid), 4) AS cvr
+FROM ab_log
+GROUP BY group_name;
+```
+""",
+    ),
 ]
 
 
@@ -720,6 +953,10 @@ async def _ensure_categories(db: AsyncSession) -> dict[str, int]:
             )
             db.add(existing)
             await db.flush()
+        else:
+            # 已存在则同步名称/顺序（便于后续调整题型命名）。
+            existing.name = str(c["name"])
+            existing.order = int(c["order"])
         slug_to_id[str(c["slug"])] = existing.id
     return slug_to_id
 
