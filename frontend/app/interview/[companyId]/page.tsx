@@ -249,8 +249,8 @@ function InterviewCardView({
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <AuthorLink post={post} />
-        {post.rounds_covered.length > 0 && (
-          <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        {(post.rounds_covered.length > 0 || post.position) && (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             {post.rounds_covered.map((r) => (
               <span
                 key={r}
@@ -259,6 +259,11 @@ function InterviewCardView({
                 {INTERVIEW_ROUND_LABEL[r] ?? r}
               </span>
             ))}
+            {post.position && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                {post.position}
+              </span>
+            )}
           </div>
         )}
       </div>

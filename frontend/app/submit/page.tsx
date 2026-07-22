@@ -171,6 +171,7 @@ function SubmitInner() {
   const [difficulty, setDifficulty] = useState("medium");
   const [tags, setTags] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [position, setPosition] = useState("");
   const [interviewType, setInterviewType] = useState<
     "social" | "campus" | "daily" | "summer"
   >("campus");
@@ -423,6 +424,7 @@ function SubmitInner() {
       difficulty: targetType === "sql" ? difficulty : undefined,
       tags: targetType === "sql" ? tags : undefined,
       company_name: targetType === "interview" ? companyName : undefined,
+      position: targetType === "interview" ? position : undefined,
       interview_type: targetType === "interview" ? interviewType : undefined,
       qa_items:
         targetType === "interview"
@@ -719,6 +721,18 @@ function SubmitInner() {
                 </datalist>
                 <p className="mt-1 text-xs text-slate-400">
                   优先从下拉里选择已有公司，避免同一公司出现多个名称。
+                </p>
+              </div>
+              <div className="flex-1 min-w-[160px]">
+                <label className="mb-1 block text-sm font-medium text-slate-700">岗位名称</label>
+                <input
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  placeholder="如：数据开发工程师"
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  填写本次面试对应的岗位，方便读者判断面经方向。
                 </p>
               </div>
               <div className="flex-1 min-w-[160px]">

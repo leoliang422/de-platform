@@ -35,6 +35,7 @@ def _extra_from(data: SubmissionCreate) -> dict[str, Any]:
         "difficulty": data.difficulty,
         "tags": data.tags,
         "company_name": data.company_name,
+        "position": data.position,
         "interview_type": data.interview_type,
         "qa_items": [q.model_dump() for q in data.qa_items] if data.qa_items else None,
         "level": data.level,
@@ -256,6 +257,7 @@ class SubmissionService:
                 # 面经已去掉标题与整体感受：内部标题用企业名，正文置空。
                 title=company_name,
                 content_md="",
+                position=extra.get("position") or "",
                 interview_type=extra.get("interview_type"),
                 qa_items=extra.get("qa_items"),
                 author_id=author_id,
