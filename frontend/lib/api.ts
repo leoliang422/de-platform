@@ -617,6 +617,7 @@ export interface InterviewCard {
   id: number;
   company_id: number;
   title: string;
+  position: string;
   interview_type: string | null;
   content_md: string;
   author_id: number | null;
@@ -792,6 +793,7 @@ export interface SubmissionCreateInput {
   difficulty?: string | null;
   tags?: string | null;
   company_name?: string | null;
+  position?: string | null;
   interview_type?: "social" | "campus" | "daily" | "summer" | null;
   qa_items?: InterviewQAInput[] | null;
   level?: string | null;

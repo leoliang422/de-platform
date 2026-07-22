@@ -25,6 +25,7 @@ class InterviewCardOut(BaseModel):
     id: int
     company_id: int
     title: str
+    position: str = ""
     interview_type: str | None = None
     content_md: str
     author_id: int | None = None

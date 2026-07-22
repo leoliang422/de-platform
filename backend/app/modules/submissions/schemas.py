@@ -35,6 +35,7 @@ class SubmissionCreate(BaseModel):
 
     # interview
     company_name: str | None = None
+    position: str | None = Field(default=None, max_length=120)
     interview_type: Literal["social", "campus", "daily", "summer"] | None = None
     qa_items: list[InterviewQAIn] | None = None
 
