@@ -17,6 +17,7 @@ export default function SqlPage() {
   const [items, setItems] = useState<SqlListItem[]>([]);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [activeCat, setActiveCat] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,16 +43,36 @@ export default function SqlPage() {
     [categories],
   );
 
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  // 按标题搜索（客户端，忽略大小写与首尾空格）。
+  const filtered = useMemo(() => {
+    const kw = query.trim().toLowerCase();
+    if (!kw) return items;
+    return items.filter((q) => q.title.toLowerCase().includes(kw));
+  }, [items, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageItems = useMemo(
-    () => items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [items, currentPage],
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage],
   );
 
   return (
     <div>
       <PageHeader title="SQL 题库" desc="数据开发高频 SQL 题目：问题 · 求解思路 · Hive SQL" />
+
+      <div className="mb-4">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1); // 搜索时回到第一页
+          }}
+          placeholder="搜索题目标题…"
+          className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        />
+      </div>
 
       {tabs.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
@@ -76,6 +97,8 @@ export default function SqlPage() {
         <ErrorText message={error} />
       ) : items.length === 0 ? (
         <Empty message="该题型下暂无题目" />
+      ) : filtered.length === 0 ? (
+        <Empty message={`没有匹配「${query.trim()}」的题目`} />
       ) : (
         <>
           <div className="space-y-3">
