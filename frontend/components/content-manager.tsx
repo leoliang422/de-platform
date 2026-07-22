@@ -71,6 +71,7 @@ const FIELDS: Record<ContentType, FieldDef[]> = {
   ],
   interview: [
     { name: "company_name", label: "企业名称", type: "text", required: true },
+    { name: "position", label: "岗位（可选）", type: "text" },
     {
       name: "interview_type",
       label: "类型",
@@ -233,6 +234,7 @@ interface AiDraft {
   description_md: string;
   implementation_md: string;
   company_name: string;
+  position: string;
   interview_type: string;
   qa_items: InterviewQAInput[];
   completing: boolean;
@@ -248,6 +250,7 @@ function emptyAiDraft(): AiDraft {
     description_md: "",
     implementation_md: "",
     company_name: "",
+    position: "",
     interview_type: "campus",
     qa_items: [emptyQa()],
     completing: false,
@@ -308,6 +311,7 @@ export function AiImportPanel({
           description_md: str(it.description_md),
           implementation_md: str(it.implementation_md),
           company_name: presetCompanyName || str(it.company_name),
+          position: str(it.position),
           interview_type:
             presetInterviewType && ["social", "campus", "daily", "summer"].includes(presetInterviewType)
               ? presetInterviewType
@@ -378,6 +382,7 @@ export function AiImportPanel({
     if (type === "interview") {
       return {
         company_name: d.company_name || "未知企业",
+        position: d.position,
         interview_type: d.interview_type,
         qa_items: d.qa_items.filter((q) => q.question.trim() || q.answer.trim()),
         status: "published",
@@ -420,7 +425,7 @@ export function AiImportPanel({
     <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50/40 p-4">
       <p className="text-sm font-semibold text-slate-800">AI 解析一键上传（直接发布）</p>
       <p className="mt-1 text-xs text-slate-500">
-        上传 Word / PDF / 文本或粘贴内容，自动拆分为多条
+        上传 图片 / Word / PDF / 文本或粘贴内容，自动拆分为多条
         {TABS.find((t) => t.value === type)?.label}
         草稿，检查后可一键发布（无需再走投稿审核）。
       </p>
@@ -436,7 +441,7 @@ export function AiImportPanel({
           选择文件解析
           <input
             type="file"
-            accept=".txt,.md,.csv,.json,.doc,.docx,.pdf"
+            accept=".txt,.md,.csv,.json,.doc,.docx,.pdf,image/*"
             className="hidden"
             disabled={parsing}
             onChange={(e) => {
@@ -488,6 +493,12 @@ export function AiImportPanel({
                     value={d.company_name}
                     onChange={(e) => update(i, { company_name: e.target.value })}
                     placeholder="企业名称"
+                    className={inputCls}
+                  />
+                  <input
+                    value={d.position}
+                    onChange={(e) => update(i, { position: e.target.value })}
+                    placeholder="岗位（可选）"
                     className={inputCls}
                   />
                   <select

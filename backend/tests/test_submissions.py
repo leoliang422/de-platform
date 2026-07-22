@@ -127,6 +127,7 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
         json={
             "target_type": "interview",
             "company_name": "字节跳动",
+            "position": "数据开发工程师",
             "interview_type": "campus",
             "qa_items": [
                 {"section": "round1", "question": "什么是数据倾斜？", "answer": "…"},
@@ -156,6 +157,7 @@ async def test_interview_submission_creates_company(client: AsyncClient, db: Asy
     card = campus["posts"][0]
     # 面经已去掉标题：内部标题回落为企业名
     assert card["title"] == "字节跳动"
+    assert card["position"] == "数据开发工程师"
     assert set(card["rounds_covered"]) == {"round1", "hr"}
     assert card["author_nickname"]  # 作者信息随卡片返回
     assert len(card["qa"]) == 2
@@ -177,6 +179,37 @@ async def test_interview_submission_requires_company(client: AsyncClient) -> Non
         json={"target_type": "interview", "title": "无企业", "raw_content": "x"},
     )
     assert resp.status_code == 422
+
+
+async def test_delete_own_submission(client: AsyncClient, db: AsyncSession) -> None:
+    user_token = await _register_and_login(client, "deleter@test.io")
+    cat_id = await _make_category(db, "Spark")
+    resp = await client.post(
+        "/submissions",
+        headers=_auth(user_token),
+        json={
+            "target_type": "knowledge",
+            "title": "待删除",
+            "raw_content": "raw body",
+            "category_id": cat_id,
+        },
+    )
+    sub_id = resp.json()["id"]
+
+    # 他人不能删
+    other = await _register_and_login(client, "other@test.io")
+    resp = await client.delete(f"/submissions/{sub_id}", headers=_auth(other))
+    assert resp.status_code == 403
+
+    # 作者本人可删
+    resp = await client.delete(f"/submissions/{sub_id}", headers=_auth(user_token))
+    assert resp.status_code == 204
+    mine = (await client.get("/submissions/me", headers=_auth(user_token))).json()
+    assert all(s["id"] != sub_id for s in mine)
+
+    # 再删返回 404
+    resp = await client.delete(f"/submissions/{sub_id}", headers=_auth(user_token))
+    assert resp.status_code == 404
 
 
 async def test_points_grant_is_idempotent(db: AsyncSession) -> None:

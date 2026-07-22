@@ -157,6 +157,20 @@ class SubmissionService:
         await self.db.refresh(submission)
         return submission
 
+    async def delete(self, submission_id: int, user: User) -> None:
+        """删除投稿记录（作者本人或管理员）。
+
+        仅移除投稿记录本身，不回收已发放积分、也不下架已发布内容——
+        用于清理「我的投稿」列表里过往不再需要的条目。
+        """
+        submission = await self.repo.get(submission_id)
+        if submission is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投稿不存在")
+        if user.role != "admin" and submission.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除该投稿")
+        await self.db.delete(submission)
+        await self.db.commit()
+
     async def approve(self, submission_id: int, content: str | None = None) -> Submission:
         submission = await self.repo.get(submission_id)
         if submission is None:

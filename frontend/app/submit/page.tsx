@@ -10,6 +10,7 @@ import {
   ApiError,
   completeAnswer,
   createSubmission,
+  deleteSubmission,
   extractFile,
   getAccessToken,
   getCategories,
@@ -192,6 +193,7 @@ function SubmitInner() {
   const [mine, setMine] = useState<Submission[]>([]);
 
   const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // 批量解析
   const [parseText, setParseText] = useState("");
@@ -243,6 +245,22 @@ function SubmitInner() {
     }
   }
 
+  async function handleDelete(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("确定删除这条投稿记录吗？该操作仅清理列表，不影响已发布内容。")) return;
+    setDeletingId(id);
+    // 乐观更新：先从列表移除，失败再回滚。
+    setMine((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await deleteSubmission(token, id);
+    } catch {
+      loadMine();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function updateQa(index: number, patch: Partial<InterviewQAInput>) {
     setQaItems((prev) => prev.map((q, i) => (i === index ? { ...q, ...patch } : q)));
   }
@@ -276,6 +294,7 @@ function SubmitInner() {
         // 面经：一场面试，填入现有表单
         const post = items[0] ?? {};
         if (str(post.company_name)) setCompanyName(str(post.company_name));
+        if (str(post.position)) setPosition(str(post.position));
         const t = str(post.interview_type);
         if (["social", "campus", "daily", "summer"].includes(t)) {
           setInterviewType(t as typeof interviewType);
@@ -424,7 +443,7 @@ function SubmitInner() {
       difficulty: targetType === "sql" ? difficulty : undefined,
       tags: targetType === "sql" ? tags : undefined,
       company_name: targetType === "interview" ? companyName : undefined,
-      position: targetType === "interview" ? position : undefined,
+      position: targetType === "interview" ? position || undefined : undefined,
       interview_type: targetType === "interview" ? interviewType : undefined,
       qa_items:
         targetType === "interview"
@@ -451,6 +470,7 @@ function SubmitInner() {
       setRaw("");
       setPromptMd("");
       setImplementation("");
+      setPosition("");
       setQaItems([{ section: "round1", question: "", answer: "" }]);
       loadMine();
       await refreshUser();
@@ -522,11 +542,10 @@ function SubmitInner() {
             AI 批量解析（上传文件 / 粘贴文本，自动拆分为多条）
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            支持 Word / PDF / 文本。
+            支持 图片 / Word / PDF / 文本（图片会自动识别文字）。
             {targetType === "interview"
               ? "面经将解析为一场面试的多条问答，填入下方表单。"
               : "解析为多条草稿，可逐条检查 / 补全后一次性提交。"}
-            （图片解析后续支持）
           </p>
           <textarea
             value={parseText}
@@ -540,7 +559,7 @@ function SubmitInner() {
               选择文件解析
               <input
                 type="file"
-                accept=".txt,.md,.csv,.json,.doc,.docx,.pdf"
+                accept=".txt,.md,.csv,.json,.doc,.docx,.pdf,image/*"
                 className="hidden"
                 disabled={parsing}
                 onChange={(e) => {
@@ -728,7 +747,7 @@ function SubmitInner() {
                 <input
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}
-                  placeholder="如：数据开发工程师"
+                  placeholder="如：数据开发工程师（可选）"
                   className={inputCls}
                 />
                 <p className="mt-1 text-xs text-slate-400">
@@ -922,6 +941,14 @@ function SubmitInner() {
                   <span className={`rounded px-2 py-0.5 text-xs ${STATUS_BADGE[s.status] ?? ""}`}>
                     {STATUS_LABEL[s.status] ?? s.status}
                   </span>
+                  <button
+                    type="button"
+                    disabled={deletingId === s.id}
+                    onClick={() => handleDelete(s.id)}
+                    className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-500 hover:border-red-400 hover:text-red-600 disabled:opacity-50"
+                  >
+                    {deletingId === s.id ? "删除中…" : "删除"}
+                  </button>
                 </div>
               </div>
               {s.status === "rejected" && s.reject_reason && (

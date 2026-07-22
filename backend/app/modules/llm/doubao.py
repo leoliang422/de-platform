@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from app.modules.llm.base import (
+    OCR_PROMPT,
     answer_template_for,
     extract_template_for,
     template_for,
@@ -47,10 +48,12 @@ class OpenAICompatClient:
     （投稿保持 processing/失败态，可重试）。
     """
 
-    def __init__(self, api_key: str, base_url: str, model: str) -> None:
+    def __init__(self, api_key: str, base_url: str, model: str, vision_model: str = "") -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        # 多模态（图片 OCR）模型；留空则回退到主模型（多数纯文本模型不支持，会报错）。
+        self.vision_model = vision_model or model
 
     async def _chat(self, system: str, user: str, temperature: float = 0.3) -> str:
         import httpx  # 延迟导入：默认 mock 路径无需该依赖
@@ -91,6 +94,36 @@ class OpenAICompatClient:
     async def complete_answer(self, question: str, target_type: str, context: str = "") -> str:
         user = question if not context else f"背景：\n{context}\n\n问题：\n{question}"
         return await self._chat(answer_template_for(target_type), user, temperature=0.4)
+
+    async def ocr_image(self, data: bytes, content_type: str) -> str:
+        """多模态模型 OCR：抽取图片中的文字为纯文本。"""
+        import base64
+
+        import httpx  # 延迟导入
+
+        b64 = base64.b64encode(data).decode("ascii")
+        data_url = f"data:{content_type or 'image/png'};base64,{b64}"
+        payload = {
+            "model": self.vision_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": OCR_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            "temperature": 0.1,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                f"{self.base_url}/chat/completions", json=payload, headers=headers
+            )
+            resp.raise_for_status()
+            body = resp.json()
+        return (body["choices"][0]["message"]["content"] or "").strip()
 
 
 def _fallback_items(raw: str, target_type: str) -> list[dict]:

@@ -56,3 +56,8 @@ class MockLLM:
     async def complete_answer(self, question: str, target_type: str, context: str = "") -> str:
         label = TYPE_LABEL.get(target_type, "内容")
         return f"（AI 生成，待人工确认）针对「{question.strip()[:80]}」的{label}参考答案。"
+
+    async def ocr_image(self, data: bytes, content_type: str) -> str:
+        # mock：不做真实 OCR，返回占位提示（未配置多模态模型时的确定性行为）。
+        ct = content_type or "image"
+        return f"（图片 OCR 占位：未配置多模态大模型，{ct} 共 {len(data)} 字节）"

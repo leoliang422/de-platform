@@ -70,7 +70,7 @@ async def create_published(
         company_id=company.id,
         title=title,
         content_md=content_md,
-        position=position or "",
+        position=(position or "").strip(),
         interview_type=interview_type,
         status=status_value,
         author_id=author_id,

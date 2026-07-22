@@ -90,6 +90,9 @@ LLM_PROVIDER=zhipu
 LLM_API_KEY=你的智谱APIKey
 LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 LLM_MODEL=glm-4-flash
+# 可选：图片 OCR（面经/投稿「一键解析」上传图片抽字）用的多模态模型；留空则回退主模型。
+# 智谱的 glm-4v-flash 免费可用。未配置时上传图片解析会提示"需配置多模态模型"。
+LLM_VISION_MODEL=glm-4v-flash
 ```
 
 **线上（Render）**：`LLM_PROVIDER` / `LLM_BASE_URL` / `LLM_MODEL` 已写进 `render.yaml`

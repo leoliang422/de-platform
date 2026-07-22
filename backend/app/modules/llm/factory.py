@@ -23,4 +23,5 @@ def get_llm_client() -> LLMClient:
         api_key=api_key,
         base_url=s.llm_base_url or s.doubao_base_url,
         model=s.llm_model or s.doubao_model,
+        vision_model=s.llm_vision_model,
     )

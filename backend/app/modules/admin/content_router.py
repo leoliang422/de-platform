@@ -223,6 +223,7 @@ async def get_interview_detail(post_id: int, db: AsyncSession = Depends(get_db))
     return {
         "id": post.id,
         "company_name": company.name if company else "",
+        "position": post.position or "",
         "interview_type": post.interview_type,
         "status": post.status,
         "qa_items": [
@@ -246,6 +247,7 @@ async def create_interview(
         # 面经无标题：内部标题用企业名。
         title=data.company_name,
         content_md="",
+        position=data.position,
         interview_type=data.interview_type,
         qa_items=[q.model_dump() for q in data.qa_items],
         author_id=None,

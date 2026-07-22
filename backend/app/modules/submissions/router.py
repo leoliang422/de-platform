@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.modules.files.extract import DOCUMENT_TYPES, TEXT_TYPES, get_extractor
+from app.modules.files.extract import DOCUMENT_TYPES, IMAGE_TYPES, TEXT_TYPES, get_extractor
 from app.modules.llm.factory import get_llm_client
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import (
@@ -59,13 +59,28 @@ async def parse_submission(
     file: UploadFile | None = File(default=None),
     current_user: User = Depends(get_current_user),
 ) -> ParseResult:
-    """上传文件/粘贴文本 → 大模型结构化拆分为多条投稿草稿（本批支持 Word/PDF/文本）。"""
+    """上传文件/粘贴文本 → 大模型结构化拆分为多条投稿草稿（支持 图片/Word/PDF/文本）。"""
     raw = (text or "").strip()
     if file is not None:
         data = await file.read()
         ct = file.content_type or ""
         if ct in TEXT_TYPES:
             raw = data.decode("utf-8", errors="replace")
+        elif ct in IMAGE_TYPES:
+            # 图片走多模态大模型 OCR 抽字，再交给结构化拆分。
+            try:
+                ocr_text = (await get_llm_client().ocr_image(data, ct)).strip()
+            except Exception as exc:  # noqa: BLE001 - OCR 失败给出可读提示
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"图片文字识别失败：{exc}。请确认已配置多模态模型，或改用文本/Word/PDF。",
+                ) from exc
+            if not ocr_text:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="未能从图片识别出文字，请换更清晰的图片或直接粘贴文本。",
+                )
+            raw = ocr_text
         elif ct in DOCUMENT_TYPES:
             out = await get_extractor().extract(
                 data=data, filename=file.filename or "", content_type=ct, url=None
@@ -73,14 +88,14 @@ async def parse_submission(
             if out.placeholder:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="未能从文件解析出文字（可能是扫描件/旧版 .doc/图片），"
-                    "请换 .docx/.pdf 或直接粘贴文本；图片解析将在后续批次支持。",
+                    detail="未能从文件解析出文字（可能是扫描件/旧版 .doc），"
+                    "请换 .docx/.pdf、上传图片，或直接粘贴文本。",
                 )
             raw = out.text
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="本批次仅支持 Word/PDF/文本文件；图片解析将在后续批次支持。",
+                detail="仅支持 图片/Word/PDF/文本文件。",
             )
     if not raw:
         raise HTTPException(
@@ -117,3 +132,13 @@ async def retry_submission(
 ) -> SubmissionOut:
     submission = await SubmissionService(db).retry(submission_id, current_user)
     return SubmissionOut.model_validate(submission)
+
+
+@router.delete("/{submission_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_submission(
+    submission_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """删除自己的投稿记录（清理「我的投稿」列表）。"""
+    await SubmissionService(db).delete(submission_id, current_user)

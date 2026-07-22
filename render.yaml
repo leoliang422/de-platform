@@ -38,6 +38,9 @@ services:
         value: https://open.bigmodel.cn/api/paas/v4
       - key: LLM_MODEL
         value: glm-4-flash
+      # 多模态模型：图片 OCR 抽字（面经/投稿一键解析图片）。glm-4v-flash 免费可用。
+      - key: LLM_VISION_MODEL
+        value: glm-4v-flash
       - key: LLM_API_KEY
         sync: false
       - key: PAYMENT_PROVIDER

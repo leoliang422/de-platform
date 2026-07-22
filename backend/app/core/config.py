@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
+    # 多模态模型（图片 OCR 抽字，用于面经/投稿一键解析图片）。留空则回退主模型。
+    # 智谱有免费的 glm-4v-flash 可用；获取方式见 docs/deployment.md「大模型接入」。
+    llm_vision_model: str = ""
     # 支付通道：mock（默认，同步结算）| wechat | alipay。
     # 选 wechat/alipay 但凭证未配齐时，工厂会自动回退到 mock（见 payment/provider.py）。
     payment_provider: str = "mock"

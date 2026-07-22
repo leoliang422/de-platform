@@ -249,7 +249,7 @@ function InterviewCardView({
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <AuthorLink post={post} />
-        {(post.rounds_covered.length > 0 || post.position) && (
+        {(post.position || post.rounds_covered.length > 0) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             {post.rounds_covered.map((r) => (
               <span
