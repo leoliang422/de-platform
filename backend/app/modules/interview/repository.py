@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.interview.models import Company, InterviewPost
@@ -26,6 +26,21 @@ class InterviewRepository:
             )
             .order_by(InterviewPost.id.desc())
         )
+        return list(result.scalars().all())
+
+    async def list_posts_by_author(
+        self, author_id: int, company_name: str | None = None
+    ) -> list[InterviewPost]:
+        stmt = select(InterviewPost).where(
+            InterviewPost.author_id == author_id,
+            InterviewPost.status == "published",
+        )
+        if company_name and company_name.strip():
+            stmt = stmt.join(Company, Company.id == InterviewPost.company_id).where(
+                func.lower(Company.name) == company_name.strip().lower()
+            )
+        stmt = stmt.order_by(InterviewPost.id.desc())
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def get_post(self, post_id: int) -> InterviewPost | None:

@@ -152,6 +152,17 @@ async def to_card_detail(
     return _to_card(post, author, locked=locked)
 
 
+async def list_mine(
+    db: AsyncSession, author_id: int, company_name: str | None = None
+) -> list[InterviewCardOut]:
+    """当前用户自己上传的面经（可按公司名过滤），本人内容始终可见。"""
+    from app.modules.interview.repository import InterviewRepository
+
+    posts = await InterviewRepository(db).list_posts_by_author(author_id, company_name)
+    author = await db.get(User, author_id)
+    return [_to_card(post, author, locked=False) for post in posts]
+
+
 async def update(db: AsyncSession, post_id: int, fields: dict[str, Any]) -> InterviewPost:
     post = await db.get(InterviewPost, post_id)
     if post is None:

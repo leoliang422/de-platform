@@ -780,6 +780,12 @@ export function getInterviewDetail(id: number, token?: string | null): Promise<I
   return request<InterviewCard>(`/interviews/${id}`, maybeAuth(token));
 }
 
+/** 当前用户自己上传的面经（可按公司名过滤），本人内容始终可见。 */
+export function getMyInterviews(token: string, company?: string): Promise<InterviewCard[]> {
+  const q = company ? `?company=${encodeURIComponent(company)}` : "";
+  return authRequest<InterviewCard[]>(`/interviews/mine${q}`, token);
+}
+
 export function revealInterview(token: string, id: number): Promise<InterviewCard> {
   return authRequest<InterviewCard>(`/interviews/${id}/reveal`, token, { method: "POST" });
 }

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -48,6 +48,16 @@ async def list_company_interviews_by_type(
             unlock_points=summary.unlock_points,
         ),
     )
+
+
+@router.get("/interviews/mine", response_model=list[InterviewCardOut])
+async def list_my_interviews(
+    company: str | None = Query(default=None, description="按公司名过滤，留空返回全部"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[InterviewCardOut]:
+    """当前用户自己上传的面经卡片（供投递记录「查看面经」弹窗展示）。"""
+    return await interview_service.list_mine(db, current_user.id, company)
 
 
 @router.get("/interviews/{post_id}", response_model=InterviewCardOut)
