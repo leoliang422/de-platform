@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 
 import { PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
+import { InterviewQaEditor, emptyQa } from "@/components/interview-qa-editor";
 import { MarkdownTextarea } from "@/components/markdown-textarea";
 import { useAuth } from "@/lib/auth";
 import {
@@ -73,29 +74,6 @@ function emptyDraft(): Draft {
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
-}
-
-type RoundSection = InterviewQAInput["section"];
-
-// 面经问答按轮次分组：一个轮次选一次，下面挂多条问答。
-interface QaGroup {
-  section: RoundSection;
-  items: { question: string; answer: string; completing?: boolean }[];
-}
-
-const ROUND_OPTIONS: { value: RoundSection; label: string }[] = [
-  { value: "round1", label: "一面" },
-  { value: "round2", label: "二面" },
-  { value: "round3", label: "三面" },
-  { value: "hr", label: "HR面" },
-];
-
-const ROUND_LABEL: Record<string, string> = Object.fromEntries(
-  ROUND_OPTIONS.map((r) => [r.value, r.label]),
-);
-
-function defaultQaGroups(): QaGroup[] {
-  return [{ section: "round1", items: [{ question: "", answer: "" }] }];
 }
 
 const TYPE_LABELS: Record<TargetType, string> = {
@@ -200,7 +178,7 @@ function SubmitInner() {
   const [interviewType, setInterviewType] = useState<
     "social" | "campus" | "daily" | "summer"
   >("campus");
-  const [qaGroups, setQaGroups] = useState<QaGroup[]>(defaultQaGroups());
+  const [qaItems, setQaItems] = useState<InterviewQAInput[]>([emptyQa()]);
   const [level, setLevel] = useState("basic");
   const [categoryId, setCategoryId] = useState("");
   const [folders, setFolders] = useState<FolderOption[]>([]);
@@ -295,46 +273,6 @@ function SubmitInner() {
     }
   }
 
-  function setGroupSection(gi: number, section: RoundSection) {
-    setQaGroups((prev) => prev.map((g, i) => (i === gi ? { ...g, section } : g)));
-  }
-
-  function updateItem(gi: number, ii: number, patch: Partial<QaGroup["items"][number]>) {
-    setQaGroups((prev) =>
-      prev.map((g, i) =>
-        i === gi
-          ? { ...g, items: g.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) }
-          : g,
-      ),
-    );
-  }
-
-  function addItem(gi: number) {
-    setQaGroups((prev) =>
-      prev.map((g, i) =>
-        i === gi ? { ...g, items: [...g.items, { question: "", answer: "" }] } : g,
-      ),
-    );
-  }
-
-  function removeItem(gi: number, ii: number) {
-    setQaGroups((prev) =>
-      prev.map((g, i) => (i === gi ? { ...g, items: g.items.filter((_, j) => j !== ii) } : g)),
-    );
-  }
-
-  function addRound() {
-    setQaGroups((prev) => {
-      const used = new Set(prev.map((g) => g.section));
-      const next = ROUND_OPTIONS.find((r) => !used.has(r.value))?.value ?? "hr";
-      return [...prev, { section: next, items: [{ question: "", answer: "" }] }];
-    });
-  }
-
-  function removeRound(gi: number) {
-    setQaGroups((prev) => prev.filter((_, i) => i !== gi));
-  }
-
   async function handleParse(file: File | null) {
     const token = getAccessToken();
     if (!token) return;
@@ -363,20 +301,13 @@ function SubmitInner() {
         }
         const qa = Array.isArray(post.qa_items) ? (post.qa_items as Record<string, unknown>[]) : [];
         if (qa.length > 0) {
-          // 按轮次分组（轮次只出现一次），保持一/二/三/HR 顺序。
-          const grouped = new Map<RoundSection, QaGroup["items"]>();
-          for (const q of qa) {
-            const section = (["round1", "round2", "round3", "hr"].includes(str(q.section))
-              ? str(q.section)
-              : "round1") as RoundSection;
-            if (!grouped.has(section)) grouped.set(section, []);
-            grouped.get(section)!.push({ question: str(q.question), answer: str(q.answer) });
-          }
-          setQaGroups(
-            ROUND_OPTIONS.filter((r) => grouped.has(r.value)).map((r) => ({
-              section: r.value,
-              items: grouped.get(r.value)!,
-            })),
+          setQaItems(
+            qa.map((q) => {
+              const section = (["round1", "round2", "round3", "hr"].includes(str(q.section))
+                ? str(q.section)
+                : "round1") as InterviewQAInput["section"];
+              return { section, question: str(q.question), answer: str(q.answer) };
+            }),
           );
         }
         setParseMsg(`已解析出 ${qa.length} 条问答并填入下方表单，请检查后提交。`);
@@ -431,27 +362,6 @@ function SubmitInner() {
       setParseErr(e instanceof ApiError ? e.message : "生成失败");
     } finally {
       updateDraft(i, { completing: false });
-    }
-  }
-
-  async function completeQaAnswer(gi: number, ii: number) {
-    const token = getAccessToken();
-    if (!token) return;
-    const qa = qaGroups[gi]?.items[ii];
-    if (!qa || !qa.question.trim()) {
-      setError("请先填写问题再生成答案");
-      return;
-    }
-    updateItem(gi, ii, { completing: true });
-    try {
-      const { answer } = await completeAnswer(token, {
-        target_type: "interview",
-        question: qa.question,
-      });
-      updateItem(gi, ii, { answer, completing: false });
-    } catch (e) {
-      updateItem(gi, ii, { completing: false });
-      setError(e instanceof ApiError ? e.message : "生成失败");
     }
   }
 
@@ -539,15 +449,7 @@ function SubmitInner() {
       interview_type: targetType === "interview" ? interviewType : undefined,
       qa_items:
         targetType === "interview"
-          ? qaGroups.flatMap((g) =>
-              g.items
-                .filter((it) => it.question.trim() || it.answer.trim())
-                .map((it) => ({
-                  section: g.section,
-                  question: it.question,
-                  answer: it.answer,
-                })),
-            )
+          ? qaItems.filter((it) => it.question.trim() || it.answer.trim())
           : undefined,
       level: targetType === "project" ? level : undefined,
       access_type: targetType === "project" ? accessType : undefined,
@@ -571,7 +473,7 @@ function SubmitInner() {
       setPromptMd("");
       setImplementation("");
       setPosition("");
-      setQaGroups(defaultQaGroups());
+      setQaItems([emptyQa()]);
       loadMine();
       await refreshUser();
     } catch (err) {
@@ -882,89 +784,7 @@ function SubmitInner() {
               </div>
             </div>
 
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700">
-                面试问答（每个轮次只需选择一次，下面依次填写该轮的问题与答案）
-              </p>
-              <div className="space-y-4">
-                {qaGroups.map((g, gi) => (
-                  <div key={gi} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-xs text-slate-500">轮次</span>
-                      <select
-                        value={g.section}
-                        onChange={(e) => setGroupSection(gi, e.target.value as RoundSection)}
-                        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium"
-                      >
-                        {ROUND_OPTIONS.map((r) => (
-                          <option key={r.value} value={r.value}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
-                      {qaGroups.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeRound(gi)}
-                          className="ml-auto text-xs text-red-500 hover:underline"
-                        >
-                          删除该轮次
-                        </button>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      {g.items.map((it, ii) => (
-                        <div key={ii} className="rounded-md bg-white p-3 ring-1 ring-slate-200">
-                          <div className="mb-2 flex items-center gap-2">
-                            <span className="text-xs text-slate-400">
-                              {ROUND_LABEL[g.section]} · 第 {ii + 1} 题
-                            </span>
-                            {g.items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeItem(gi, ii)}
-                                className="ml-auto text-xs text-red-500 hover:underline"
-                              >
-                                删除
-                              </button>
-                            )}
-                          </div>
-                          <input
-                            value={it.question}
-                            onChange={(e) => updateItem(gi, ii, { question: e.target.value })}
-                            placeholder="问题"
-                            className={`${inputCls} mb-2`}
-                          />
-                          <MarkdownTextarea
-                            value={it.answer}
-                            onChange={(v) => updateItem(gi, ii, { answer: v })}
-                            placeholder="答案 / 参考回答（可选，可点下方 AI 生成后人工确认）"
-                            rows={2}
-                            className={inputCls}
-                            hint={false}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => completeQaAnswer(gi, ii)}
-                            disabled={it.completing}
-                            className="mt-1 text-xs text-brand-600 hover:underline disabled:opacity-50"
-                          >
-                            {it.completing ? "生成中…" : "AI 生成答案"}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addItem(gi)}
-                      className="mt-2 text-sm text-brand-600 hover:underline"
-                    >
-                      + 添加一道问答
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <InterviewQaEditor items={qaItems} onChange={setQaItems} onError={setError} />
           </div>
         )}
 
@@ -1052,15 +872,6 @@ function SubmitInner() {
         {message && <p className="text-sm text-green-600">{message}</p>}
 
         <div className="flex flex-wrap items-center gap-3">
-          {targetType === "interview" && (
-            <button
-              type="button"
-              onClick={addRound}
-              className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50"
-            >
-              + 添加一个轮次
-            </button>
-          )}
           <button
             type="submit"
             disabled={submitting}
