@@ -29,6 +29,8 @@ import {
   getAccessToken,
   getAdminConversation,
   getAdminConversations,
+  getRechargeConfig,
+  type RechargeConfig,
   replyToUser,
   uploadImage,
 } from "@/lib/api";
@@ -48,9 +50,123 @@ export default function AdminPage() {
   );
 }
 
+type SectionId = "review" | "catalog" | "users" | "messages" | "settings";
+
+const PAGE_SIZE = 10;
+
+// 通用分页控件：列表过长时翻页展示。
+function Pager({
+  page,
+  totalPages,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  onPage: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+      <button
+        onClick={() => onPage(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="rounded border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+      >
+        上一页
+      </button>
+      <span className="text-slate-500">
+        {page} / {totalPages}
+      </span>
+      <button
+        onClick={() => onPage(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="rounded border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+      >
+        下一页
+      </button>
+    </div>
+  );
+}
+
 function AdminInner() {
+  const [section, setSection] = useState<SectionId>("review");
+  const [badges, setBadges] = useState({ review: 0, messages: 0 });
+
+  // 轻量拉取角标数量（待审内容 + 待确认充值、未读私信），用于左侧导航提示。
+  const loadBadges = useCallback(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    Promise.all([
+      adminListSubmissions(token, "pending_review").catch(() => [] as AdminSubmission[]),
+      adminListRechargeOrders(token, "pending").catch(() => [] as AdminRechargeOrder[]),
+      getAdminConversations(token).catch(() => [] as AdminConversation[]),
+    ]).then(([subs, orders, convs]) => {
+      const unread = convs.reduce((n, c) => n + (c.unread || 0), 0);
+      setBadges({ review: subs.length + orders.length, messages: unread });
+    });
+  }, []);
+
+  useEffect(() => {
+    loadBadges();
+    const t = setInterval(loadBadges, 20000);
+    return () => clearInterval(t);
+  }, [loadBadges]);
+
+  const nav: { id: SectionId; label: string; badge?: number }[] = [
+    { id: "review", label: "审核", badge: badges.review },
+    { id: "catalog", label: "目录管理" },
+    { id: "users", label: "用户管理" },
+    { id: "messages", label: "用户私信", badge: badges.messages },
+    { id: "settings", label: "系统配置" },
+  ];
+
+  return (
+    <div>
+      <PageHeader title="管理后台" desc="审核投稿、管理内容、维护目录与系统配置" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[190px_1fr]">
+        <aside className="text-sm md:sticky md:top-20 md:self-start">
+          <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            管理模块
+          </p>
+          <div className="space-y-0.5">
+            {nav.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => setSection(n.id)}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left ${
+                  section === n.id
+                    ? "bg-brand-50 font-medium text-brand-700"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>{n.label}</span>
+                {n.badge ? (
+                  <span className="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                    {n.badge > 99 ? "99+" : n.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="min-w-0">
+          {section === "review" && <ContentReview onChange={loadBadges} />}
+          {section === "catalog" && <FolderManager />}
+          {section === "users" && <UserManager />}
+          {section === "messages" && <AdminMessages onChange={loadBadges} />}
+          {section === "settings" && <SystemSettings />}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// 审核 section：内容审核（投稿）+ 充值审核，两块各自分页。
+function ContentReview({ onChange }: { onChange: () => void }) {
   const [subs, setSubs] = useState<AdminSubmission[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(() => {
     const token = getAccessToken();
@@ -69,6 +185,7 @@ function AdminInner() {
     if (!token) return;
     await adminApprove(token, id, content);
     load();
+    onChange();
   }
 
   async function reject(id: number) {
@@ -78,31 +195,33 @@ function AdminInner() {
     if (!reason) return;
     await adminReject(token, id, reason);
     load();
+    onChange();
   }
+
+  const totalPages = Math.max(1, Math.ceil(subs.length / PAGE_SIZE));
+  const pageItems = subs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div>
-      <PageHeader title="管理后台" desc="审核投稿、管理内容、维护分类" />
-
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">审核队列</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">内容审核</h2>
+        <span className="text-xs text-slate-400">待审核 {subs.length} 条</span>
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {subs.length === 0 ? (
         <p className="text-sm text-slate-400">当前没有待审核的投稿。</p>
       ) : (
-        <div className="space-y-4">
-          {subs.map((s) => (
-            <SubmissionReview key={s.id} sub={s} onApprove={approve} onReject={reject} />
-          ))}
-        </div>
+        <>
+          <div className="space-y-4">
+            {pageItems.map((s) => (
+              <SubmissionReview key={s.id} sub={s} onApprove={approve} onReject={reject} />
+            ))}
+          </div>
+          <Pager page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
-      <RechargeReview />
-
-      <FolderManager />
-
-      <UserManager />
-
-      <AdminMessages />
+      <RechargeReview onChange={onChange} />
     </div>
   );
 }
@@ -142,7 +261,7 @@ function RechargeQrSetting() {
   }
 
   return (
-    <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
       <h2 className="mb-3 text-lg font-semibold text-slate-900">收款码设置</h2>
       <div className="flex flex-col items-start gap-4 sm:flex-row">
         {url ? (
@@ -171,10 +290,70 @@ function RechargeQrSetting() {
   );
 }
 
-function RechargeReview() {
+// 系统配置 section：收款码设置 + 积分规则展示。
+function SystemSettings() {
+  return (
+    <div className="space-y-8">
+      <RechargeQrSetting />
+      <PointsRules />
+    </div>
+  );
+}
+
+function PointsRules() {
+  const [cfg, setCfg] = useState<RechargeConfig | null>(null);
+
+  useEffect(() => {
+    getRechargeConfig()
+      .then(setCfg)
+      .catch(() => setCfg(null));
+  }, []);
+
+  return (
+    <div>
+      <h2 className="mb-1 text-lg font-semibold text-slate-900">积分规则</h2>
+      <p className="mb-4 text-xs text-slate-500">
+        八股全部免费；SQL / 面经 每人可免费查看前 10 条，超出后一次性用积分解锁整个模块；项目按单项积分解锁。
+        免费额度与充值套餐由后端配置（环境变量）设定，如需在后台在线编辑可告诉我扩展。
+      </p>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700">充值套餐</h3>
+        {!cfg ? (
+          <p className="text-sm text-slate-400">加载中…</p>
+        ) : cfg.packages.length === 0 ? (
+          <p className="text-sm text-slate-400">未配置充值套餐。</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">套餐</th>
+                  <th className="px-3 py-2">金额（元）</th>
+                  <th className="px-3 py-2">到账积分</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cfg.packages.map((p, i) => (
+                  <tr key={p.id}>
+                    <td className="px-3 py-2 text-slate-400">#{i + 1}</td>
+                    <td className="px-3 py-2 text-slate-700">¥{p.amount}</td>
+                    <td className="px-3 py-2 font-medium text-slate-800">{p.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RechargeReview({ onChange }: { onChange: () => void }) {
   const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(() => {
     const token = getAccessToken();
@@ -196,6 +375,7 @@ function RechargeReview() {
     try {
       await adminConfirmRecharge(token, id);
       load();
+      onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : "确认失败");
     } finally {
@@ -211,6 +391,7 @@ function RechargeReview() {
     try {
       await adminRejectRecharge(token, id);
       load();
+      onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : "驳回失败");
     } finally {
@@ -218,17 +399,21 @@ function RechargeReview() {
     }
   }
 
-  return (
-    <div className="mt-10">
-      <RechargeQrSetting />
+  const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
+  const pageItems = orders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">充值审核</h2>
+  return (
+    <div className="mt-10 border-t border-slate-200 pt-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">充值审核</h2>
+        <span className="text-xs text-slate-400">待确认 {orders.length} 笔</span>
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {orders.length === 0 ? (
         <p className="text-sm text-slate-400">当前没有待确认的充值申请。</p>
       ) : (
         <div className="space-y-3">
-          {orders.map((o) => (
+          {pageItems.map((o) => (
             <div
               key={o.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm"
@@ -266,13 +451,14 @@ function RechargeReview() {
               </div>
             </div>
           ))}
+          <Pager page={page} totalPages={totalPages} onPage={setPage} />
         </div>
       )}
     </div>
   );
 }
 
-function AdminMessages() {
+function AdminMessages({ onChange }: { onChange?: () => void }) {
   const [convs, setConvs] = useState<AdminConversation[]>([]);
   const [activeUser, setActiveUser] = useState<number | null>(null);
   const [msgs, setMsgs] = useState<ContactMessage[]>([]);
@@ -301,7 +487,8 @@ function AdminMessages() {
       .catch(() => setMsgs([]));
     // 拉取后未读会清零，刷新列表徽标
     setConvs((prev) => prev.map((c) => (c.user_id === userId ? { ...c, unread: 0 } : c)));
-  }, []);
+    onChange?.();
+  }, [onChange]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -314,12 +501,13 @@ function AdminMessages() {
     const msg = await replyToUser(token, activeUser, payload);
     setMsgs((prev) => [...prev, msg]);
     loadConvs();
+    onChange?.();
   }
 
   const activeConv = convs.find((c) => c.user_id === activeUser);
 
   return (
-    <div className="mt-10">
+    <div>
       <h2 className="mb-3 text-lg font-semibold text-slate-900">用户私信</h2>
       <div className="flex h-[26rem] overflow-hidden rounded-xl border border-slate-200 bg-white">
         {/* 会话列表 */}
@@ -481,12 +669,16 @@ function UserManager() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accessUser, setAccessUser] = useState<AdminUser | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback((query: string) => {
     const token = getAccessToken();
     if (!token) return;
     adminListUsers(token, query || undefined)
-      .then(setUsers)
+      .then((us) => {
+        setUsers(us);
+        setPage(1);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -528,9 +720,15 @@ function UserManager() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const pageUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="mt-10">
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">用户管理</h2>
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">用户管理</h2>
+        <span className="text-xs text-slate-400">共 {users.length} 名用户</span>
+      </div>
       <div className="mb-3 flex gap-2">
         <input
           value={q}
@@ -561,7 +759,7 @@ function UserManager() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {users.map((u) => (
+            {pageUsers.map((u) => (
               <tr key={u.id} className="hover:bg-slate-50">
                 <td className="px-3 py-2 text-slate-400">{u.id}</td>
                 <td className="px-3 py-2 text-slate-700">{u.email}</td>
@@ -609,6 +807,7 @@ function UserManager() {
           </tbody>
         </table>
       </div>
+      <Pager page={page} totalPages={totalPages} onPage={setPage} />
 
       {accessUser && (
         <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />
