@@ -247,9 +247,7 @@ class InteractionService:
 
     # ---- 划词批注（无需审核、全员可见、可回复/删除） ----
 
-    async def list_annotations(
-        self, ct: str, cid: int, user_id: int | None
-    ) -> list[AnnotationOut]:
+    async def list_annotations(self, ct: str, cid: int, user_id: int | None) -> list[AnnotationOut]:
         _validate_type(ct)
         # 批注为「个人笔记」，仅本人可见；未登录返回空。
         if user_id is None:
@@ -317,6 +315,19 @@ class InteractionService:
         await self.db.commit()
         await self.db.refresh(annotation)
         return annotation
+
+    async def update_annotation(
+        self, user: User, annotation_id: int, body: str
+    ) -> tuple[Annotation, User]:
+        annotation = await self.db.get(Annotation, annotation_id)
+        if annotation is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="笔记不存在")
+        if annotation.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权修改")
+        annotation.body = body
+        await self.db.commit()
+        await self.db.refresh(annotation)
+        return annotation, user
 
     async def delete_annotation(self, user: User, annotation_id: int) -> None:
         annotation = await self.db.get(Annotation, annotation_id)
