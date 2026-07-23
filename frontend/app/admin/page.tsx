@@ -50,7 +50,7 @@ export default function AdminPage() {
   );
 }
 
-type SectionId = "review" | "catalog" | "users" | "messages" | "settings";
+type SectionId = "review" | "recharge" | "catalog" | "users" | "messages" | "settings";
 
 const PAGE_SIZE = 10;
 
@@ -90,9 +90,9 @@ function Pager({
 
 function AdminInner() {
   const [section, setSection] = useState<SectionId>("review");
-  const [badges, setBadges] = useState({ review: 0, messages: 0 });
+  const [badges, setBadges] = useState({ review: 0, recharge: 0, messages: 0 });
 
-  // 轻量拉取角标数量（待审内容 + 待确认充值、未读私信），用于左侧导航提示。
+  // 轻量拉取角标数量（待审投稿 / 待确认充值 / 未读私信），用于左侧导航提示。
   const loadBadges = useCallback(() => {
     const token = getAccessToken();
     if (!token) return;
@@ -102,7 +102,7 @@ function AdminInner() {
       getAdminConversations(token).catch(() => [] as AdminConversation[]),
     ]).then(([subs, orders, convs]) => {
       const unread = convs.reduce((n, c) => n + (c.unread || 0), 0);
-      setBadges({ review: subs.length + orders.length, messages: unread });
+      setBadges({ review: subs.length, recharge: orders.length, messages: unread });
     });
   }, []);
 
@@ -113,7 +113,8 @@ function AdminInner() {
   }, [loadBadges]);
 
   const nav: { id: SectionId; label: string; badge?: number }[] = [
-    { id: "review", label: "审核", badge: badges.review },
+    { id: "review", label: "八股审核", badge: badges.review },
+    { id: "recharge", label: "充值管理", badge: badges.recharge },
     { id: "catalog", label: "目录管理" },
     { id: "users", label: "用户管理" },
     { id: "messages", label: "用户私信", badge: badges.messages },
@@ -152,6 +153,7 @@ function AdminInner() {
 
         <section className="min-w-0">
           {section === "review" && <ContentReview onChange={loadBadges} />}
+          {section === "recharge" && <RechargeManage onChange={loadBadges} />}
           {section === "catalog" && <FolderManager />}
           {section === "users" && <UserManager />}
           {section === "messages" && <AdminMessages onChange={loadBadges} />}
@@ -162,7 +164,7 @@ function AdminInner() {
   );
 }
 
-// 审核 section：内容审核（投稿）+ 充值审核，两块各自分页。
+// 审核 section：仅投稿（八股/SQL/面经/项目）内容审核。
 function ContentReview({ onChange }: { onChange: () => void }) {
   const [subs, setSubs] = useState<AdminSubmission[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -220,7 +222,15 @@ function ContentReview({ onChange }: { onChange: () => void }) {
           <Pager page={page} totalPages={totalPages} onPage={setPage} />
         </>
       )}
+    </div>
+  );
+}
 
+// 充值管理 section：收款码设置 + 充值审核，两块合一页。
+function RechargeManage({ onChange }: { onChange: () => void }) {
+  return (
+    <div className="space-y-8">
+      <RechargeQrSetting />
       <RechargeReview onChange={onChange} />
     </div>
   );
@@ -290,11 +300,10 @@ function RechargeQrSetting() {
   );
 }
 
-// 系统配置 section：收款码设置 + 积分规则展示。
+// 系统配置 section：积分规则展示。
 function SystemSettings() {
   return (
     <div className="space-y-8">
-      <RechargeQrSetting />
       <PointsRules />
     </div>
   );
