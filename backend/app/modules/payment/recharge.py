@@ -10,6 +10,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -39,7 +40,7 @@ class RechargeService:
         self.db = db
         self.repo = PaymentRepository(db)
 
-    async def create(self, user_id: int, package_id: int) -> Order:
+    async def create(self, user_id: int, package_id: int, note: str | None = None) -> Order:
         packages = list_packages()
         pkg = next((p for p in packages if p["id"] == package_id), None)
         if pkg is None:
@@ -51,6 +52,7 @@ class RechargeService:
             item_id=package_id,
             amount_cash=Decimal(str(pkg["amount"])),
             points_delta=pkg["points"],
+            note=(note or "").strip()[:255] or None,
             status="pending",
             provider="manual",
         )
@@ -75,8 +77,23 @@ class RechargeService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="该订单已被驳回，无法确认"
             )
-        order.status = "paid"
-        # 幂等发放：同一 (recharge, order.id) 只会加一次积分。
+        # 原子状态流转（compare-and-swap）：只有把 pending → paid 成功的那次请求才发积分。
+        # 多个管理员并发点「确认」时，只有一个 UPDATE 命中（rowcount=1），其余命中 0，
+        # 从而杜绝重复加分（叠加 grant 的幂等作为第二重保险）。
+        result = await self.db.execute(
+            update(Order)
+            .where(Order.id == order_id, Order.status == "pending")
+            .values(status="paid")
+        )
+        if result.rowcount == 0:
+            # 已被其他管理员并发处理：不重复发分，返回最新状态。
+            await self.db.rollback()
+            latest = await self.repo.get_order(order_id)
+            if latest is not None and latest.status == "failed":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="该订单已被驳回，无法确认"
+                )
+            return latest if latest is not None else order
         await PointsService(self.db).grant(
             user_id=order.user_id,
             delta=order.points_delta or 0,
@@ -96,7 +113,20 @@ class RechargeService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="该订单已到账，无法驳回"
             )
-        order.status = "failed"
+        # 原子流转 pending → failed；若已被并发确认到账则拒绝驳回。
+        result = await self.db.execute(
+            update(Order)
+            .where(Order.id == order_id, Order.status == "pending")
+            .values(status="failed")
+        )
+        if result.rowcount == 0:
+            await self.db.rollback()
+            latest = await self.repo.get_order(order_id)
+            if latest is not None and latest.status == "paid":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="该订单已到账，无法驳回"
+                )
+            return latest if latest is not None else order
         await self.db.commit()
         await self.db.refresh(order)
         return order

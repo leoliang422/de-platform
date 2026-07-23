@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 PayableType = Literal["project", "knowledge"]
 UnlockMethod = Literal["cash", "points"]
@@ -49,6 +49,7 @@ class RechargeConfigOut(BaseModel):
 
 class RechargeCreateIn(BaseModel):
     package_id: int
+    note: str | None = Field(default=None, max_length=255)
 
 
 class RechargeOrderOut(BaseModel):
@@ -57,5 +58,6 @@ class RechargeOrderOut(BaseModel):
     id: int
     amount_cash: float
     points_delta: int | None = None
+    note: str | None = None
     status: str  # pending（待确认）| paid（已到账）| failed（已驳回）
     created_at: dt.datetime

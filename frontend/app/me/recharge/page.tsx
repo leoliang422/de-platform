@@ -31,6 +31,7 @@ function RechargeInner() {
   const [config, setConfig] = useState<RechargeConfig | null>(null);
   const [orders, setOrders] = useState<RechargeOrder[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
+  const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -62,8 +63,9 @@ function RechargeInner() {
     setError(null);
     setNotice(null);
     try {
-      await createRechargeOrder(token, selected);
+      await createRechargeOrder(token, selected, note);
       setNotice("已提交充值申请，请扫码支付对应金额；管理员核对到账后积分将自动到账。");
+      setNote("");
       loadOrders();
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败，请重试");
@@ -130,6 +132,18 @@ function RechargeInner() {
                 <li>点击下方「我已支付」提交申请</li>
                 <li>管理员核对到账后确认，积分自动到账</li>
               </ol>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-slate-500">
+                  转账备注（选填，方便管理员核对，如付款账号/昵称）
+                </label>
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={255}
+                  placeholder="如：微信付款尾号 1234 / 昵称 xxx"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                />
+              </div>
               <button
                 onClick={submit}
                 disabled={submitting || selected === null || !config?.qr_url}
@@ -157,6 +171,7 @@ function RechargeInner() {
               >
                 <span className="text-slate-700">
                   ¥{o.amount_cash} · {o.points_delta ?? 0} 积分
+                  {o.note && <span className="ml-2 text-xs text-slate-400">备注：{o.note}</span>}
                 </span>
                 <span className={`rounded px-2 py-0.5 text-xs ${s.cls}`}>{s.text}</span>
               </div>

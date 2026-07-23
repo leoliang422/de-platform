@@ -242,6 +242,11 @@ function RechargeReview() {
                   订单 #{o.id} · ¥{o.amount_cash} · 到账 {o.points_delta ?? 0} 积分 ·{" "}
                   {new Date(o.created_at).toLocaleString()}
                 </div>
+                {o.note && (
+                  <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    转账备注：{o.note}
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
