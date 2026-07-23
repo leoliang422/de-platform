@@ -374,6 +374,115 @@ interface PendingSelection {
 }
 
 // 阅读页两栏容器：左侧正文可划词加注，右侧批注栏（全员可见、免审核、可回复/删除）。
+// 个人私有笔记面板：直接书写 + 列表展示，仅自己可见、免审核。
+// 不依赖划词选区 / CSS Highlight API，保证在各浏览器都能稳定显示。
+export function PersonalNotes({
+  contentType,
+  contentId,
+}: {
+  contentType: InteractionContentType;
+  contentId: number;
+}) {
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<AnnotationItem[]>([]);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    const token = getAccessToken();
+    if (!token) {
+      setNotes([]);
+      return;
+    }
+    getAnnotations(contentType, contentId, token)
+      .then(setNotes)
+      .catch(() => setNotes([]));
+  }, [contentType, contentId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save() {
+    const token = getAccessToken();
+    if (!token || !body.trim()) return;
+    setBusy(true);
+    try {
+      await createAnnotation(token, contentType, contentId, body.trim());
+      setBody("");
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("确认删除该笔记？")) return;
+    await deleteAnnotation(token, id);
+    load();
+  }
+
+  const tops = notes.filter((n) => n.parent_id == null);
+
+  return (
+    <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="text-base font-semibold text-slate-900">我的笔记（仅自己可见）</h3>
+      <p className="mb-3 mt-0.5 text-xs text-slate-400">
+        记录你对本题的思路 / 易错点，只有你自己能看到，免审核、即时保存。
+      </p>
+
+      {user ? (
+        <div className="mb-4">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={3}
+            placeholder="写一条笔记…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+          <button
+            onClick={save}
+            disabled={busy || !body.trim()}
+            className="mt-2 rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {busy ? "保存中…" : "保存笔记"}
+          </button>
+        </div>
+      ) : (
+        <p className="mb-4 text-sm text-slate-400">
+          <Link href="/login" className="text-brand-600 hover:underline">
+            登录
+          </Link>
+          后可记私有笔记。
+        </p>
+      )}
+
+      {tops.length === 0 ? (
+        <p className="text-sm text-slate-400">还没有笔记。</p>
+      ) : (
+        <ul className="space-y-2">
+          {tops.map((n) => (
+            <li
+              key={n.id}
+              className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
+            >
+              <span className="whitespace-pre-wrap break-words text-slate-700">{n.body}</span>
+              <button
+                onClick={() => remove(n.id)}
+                className="shrink-0 text-xs text-slate-400 hover:text-red-500"
+              >
+                删除
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function AnnotatedReader({
   contentType,
   contentId,
