@@ -47,6 +47,20 @@ const TYPE_LABELS: Record<string, string> = {
   project: "项目",
 };
 
+const ROUND_LABEL: Record<string, string> = {
+  round1: "一面",
+  round2: "二面",
+  round3: "三面",
+  hr: "HR面",
+};
+
+const INTERVIEW_TYPE_LABEL: Record<string, string> = {
+  campus: "校招",
+  social: "社招",
+  daily: "日常实习",
+  summer: "暑期实习",
+};
+
 export default function AdminPage() {
   return (
     <RequireAuth adminOnly>
@@ -907,10 +921,23 @@ function SubmissionReview({
   const [busy, setBusy] = useState(false);
   const isInterview = sub.target_type === "interview";
 
+  // 面经为结构化投稿：从 extra 读出企业/岗位/类型/问答，按轮次分组预览。
+  const extra = sub.extra ?? {};
+  const qaItems = Array.isArray(extra.qa_items)
+    ? (extra.qa_items as Record<string, unknown>[])
+    : [];
+  const qaGroups = ["round1", "round2", "round3", "hr"]
+    .map((section) => ({
+      section,
+      items: qaItems.filter((q) => String(q.section) === section),
+    }))
+    .filter((g) => g.items.length > 0);
+
   async function publish() {
     setBusy(true);
     try {
-      await onApprove(sub.id, editor);
+      // 面经按结构化 qa_items 发布，无需传正文；其余类型传最终编辑内容。
+      await onApprove(sub.id, isInterview ? undefined : editor);
     } finally {
       setBusy(false);
     }
@@ -920,56 +947,99 @@ function SubmissionReview({
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-medium text-slate-900">
-          [{TYPE_LABELS[sub.target_type] ?? sub.target_type}] {sub.title}
+          [{TYPE_LABELS[sub.target_type] ?? sub.target_type}]{" "}
+          {isInterview ? String(extra.company_name ?? sub.title ?? "面经") : sub.title}
         </span>
         <span className="text-xs text-slate-400">用户 #{sub.user_id}</span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">用户原文</span>
-            <button
-              type="button"
-              onClick={() => setEditor(sub.raw_content)}
-              className="text-xs text-brand-600 hover:underline"
-            >
-              用此版本 →
-            </button>
+      {isInterview ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {extra.position ? (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-600">
+                岗位：{String(extra.position)}
+              </span>
+            ) : null}
+            {extra.interview_type ? (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-600">
+                {INTERVIEW_TYPE_LABEL[String(extra.interview_type)] ??
+                  String(extra.interview_type)}
+              </span>
+            ) : null}
           </div>
-          <Prose>{sub.raw_content}</Prose>
+          {qaGroups.length === 0 ? (
+            <p className="text-sm text-slate-400">该面经未填写问答。</p>
+          ) : (
+            qaGroups.map((g) => (
+              <div key={g.section} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-2 text-sm font-semibold text-brand-700">
+                  {ROUND_LABEL[g.section] ?? g.section}
+                </div>
+                <div className="space-y-3">
+                  {g.items.map((q, i) => (
+                    <div key={i}>
+                      <p className="text-sm font-medium text-slate-800">
+                        Q{i + 1}：{String(q.question ?? "")}
+                      </p>
+                      {String(q.answer ?? "").trim() ? (
+                        <div className="mt-1">
+                          <Prose>{String(q.answer)}</Prose>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-400">（未填写答案）</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">AI 整理稿</span>
-            <button
-              type="button"
-              onClick={() => setEditor(sub.processed_md ?? sub.raw_content)}
-              className="text-xs text-brand-600 hover:underline"
-            >
-              用此版本 →
-            </button>
+      ) : (
+        <>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">用户原文</span>
+                <button
+                  type="button"
+                  onClick={() => setEditor(sub.raw_content)}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  用此版本 →
+                </button>
+              </div>
+              <Prose>{sub.raw_content}</Prose>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">AI 整理稿</span>
+                <button
+                  type="button"
+                  onClick={() => setEditor(sub.processed_md ?? sub.raw_content)}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  用此版本 →
+                </button>
+              </div>
+              <Prose>{sub.processed_md ?? "（暂无 AI 稿）"}</Prose>
+            </div>
           </div>
-          <Prose>{sub.processed_md ?? "（暂无 AI 稿）"}</Prose>
-        </div>
-      </div>
 
-      <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-slate-500">
-          最终发布内容（可二次编辑，Markdown）
-        </label>
-        <textarea
-          value={editor}
-          onChange={(e) => setEditor(e.target.value)}
-          rows={10}
-          className="w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-relaxed focus:border-brand-500 focus:outline-none"
-        />
-        {isInterview && (
-          <p className="mt-1 text-xs text-amber-600">
-            面经按「企业 / 问答」结构化发布，此正文仅供参考，不影响最终展示。
-          </p>
-        )}
-      </div>
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              最终发布内容（可二次编辑，Markdown）
+            </label>
+            <textarea
+              value={editor}
+              onChange={(e) => setEditor(e.target.value)}
+              rows={10}
+              className="w-full rounded-lg border border-slate-300 p-3 font-mono text-xs leading-relaxed focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+        </>
+      )}
 
       <div className="mt-3 flex gap-2">
         <button

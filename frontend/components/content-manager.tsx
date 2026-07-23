@@ -123,11 +123,12 @@ function emptyValues(type: ContentType): FormValues {
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none";
 
-function emptyQa(): InterviewQAInput {
-  return { section: "round1", question: "", answer: "" };
+function emptyQa(section: InterviewQAInput["section"] = "round1"): InterviewQAInput {
+  return { section, question: "", answer: "" };
 }
 
-// 面经问答编辑器：管理员可按轮次编辑问题/答案，并可 AI 生成答案。
+// 面经问答编辑器：按「轮次」分组——每个轮次只选择一次，其下再填多问多答，并可 AI 生成答案。
+// 数据仍以扁平的 InterviewQAInput[] 对外传出；按 section 归组只影响展示与编辑。
 function InterviewQaEditor({
   items,
   onChange,
@@ -137,20 +138,56 @@ function InterviewQaEditor({
 }) {
   const [genIndex, setGenIndex] = useState<number | null>(null);
 
-  function update(i: number, patch: Partial<InterviewQAInput>) {
-    onChange(items.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+  // 按 ROUND_OPTIONS 顺序把扁平项归为若干轮次组（保留每项在扁平数组中的下标以便编辑）。
+  const groups = ROUND_OPTIONS.map((r) => ({
+    section: r.value,
+    label: r.label,
+    entries: items
+      .map((it, idx) => ({ it, idx }))
+      .filter(({ it }) => it.section === r.value),
+  })).filter((g) => g.entries.length > 0);
+
+  function update(idx: number, patch: Partial<InterviewQAInput>) {
+    onChange(items.map((q, i) => (i === idx ? { ...q, ...patch } : q)));
   }
 
-  async function generate(i: number) {
+  function removeItem(idx: number) {
+    const next = items.filter((_, i) => i !== idx);
+    onChange(next.length > 0 ? next : [emptyQa()]);
+  }
+
+  function changeGroupSection(
+    from: InterviewQAInput["section"],
+    to: InterviewQAInput["section"],
+  ) {
+    onChange(items.map((q) => (q.section === from ? { ...q, section: to } : q)));
+  }
+
+  function addItem(section: InterviewQAInput["section"]) {
+    onChange([...items, emptyQa(section)]);
+  }
+
+  function removeRound(section: InterviewQAInput["section"]) {
+    const next = items.filter((q) => q.section !== section);
+    onChange(next.length > 0 ? next : [emptyQa()]);
+  }
+
+  function addRound() {
+    const used = new Set(items.map((q) => q.section));
+    const next = ROUND_OPTIONS.find((r) => !used.has(r.value))?.value ?? "round1";
+    onChange([...items, emptyQa(next)]);
+  }
+
+  async function generate(idx: number) {
     const token = getAccessToken();
-    if (!token || !items[i].question.trim()) return;
-    setGenIndex(i);
+    if (!token || !items[idx].question.trim()) return;
+    setGenIndex(idx);
     try {
       const { answer } = await completeAnswer(token, {
         target_type: "interview",
-        question: items[i].question,
+        question: items[idx].question,
       });
-      update(i, { answer });
+      update(idx, { answer });
     } catch {
       // 忽略：保留原答案
     } finally {
@@ -159,18 +196,23 @@ function InterviewQaEditor({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <p className="mb-2 text-xs font-medium text-slate-600">面试问答（按轮次分别填写问题与答案）</p>
-      <div className="space-y-3">
-        {items.map((qa, i) => (
-          <div key={i} className="rounded-md bg-slate-50 p-3">
+    <div>
+      <p className="mb-2 text-xs font-medium text-slate-600">
+        面试问答（每个轮次只需选择一次，其下可加多条问答）
+      </p>
+      <div className="space-y-4">
+        {groups.map((g) => (
+          <div
+            key={g.section}
+            className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0"
+          >
             <div className="mb-2 flex items-center gap-2">
               <select
-                value={qa.section}
+                value={g.section}
                 onChange={(e) =>
-                  update(i, { section: e.target.value as InterviewQAInput["section"] })
+                  changeGroupSection(g.section, e.target.value as InterviewQAInput["section"])
                 }
-                className="rounded border border-slate-300 px-2 py-1 text-xs"
+                className="rounded border border-slate-300 px-2 py-1 text-xs font-medium"
               >
                 {ROUND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -178,48 +220,70 @@ function InterviewQaEditor({
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-slate-400">第 {i + 1} 条</span>
-              {items.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                  className="ml-auto text-xs text-red-500 hover:underline"
-                >
-                  删除
-                </button>
-              )}
+              <span className="text-xs text-slate-400">共 {g.entries.length} 问</span>
+              <button
+                type="button"
+                onClick={() => removeRound(g.section)}
+                className="ml-auto text-xs text-red-500 hover:underline"
+              >
+                删除该轮次
+              </button>
             </div>
-            <input
-              value={qa.question}
-              onChange={(e) => update(i, { question: e.target.value })}
-              placeholder="问题"
-              className={`${inputCls} mb-2`}
-            />
-            <MarkdownTextarea
-              value={qa.answer}
-              onChange={(v) => update(i, { answer: v })}
-              placeholder="答案 / 参考回答"
-              rows={2}
-              className={inputCls}
-              hint={false}
-            />
+            <div className="space-y-2">
+              {g.entries.map(({ it, idx }) => (
+                <div key={idx} className="rounded-md border border-slate-200 p-2">
+                  <input
+                    value={it.question}
+                    onChange={(e) => update(idx, { question: e.target.value })}
+                    placeholder="问题"
+                    className={`${inputCls} mb-2`}
+                  />
+                  <MarkdownTextarea
+                    value={it.answer}
+                    onChange={(v) => update(idx, { answer: v })}
+                    placeholder="答案 / 参考回答"
+                    rows={2}
+                    className={inputCls}
+                    hint={false}
+                  />
+                  <div className="mt-1 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => generate(idx)}
+                      disabled={genIndex === idx}
+                      className="text-xs text-brand-600 hover:underline disabled:opacity-50"
+                    >
+                      {genIndex === idx ? "生成中…" : "AI 生成答案"}
+                    </button>
+                    {items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        删除
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
             <button
               type="button"
-              onClick={() => generate(i)}
-              disabled={genIndex === i}
-              className="mt-1 text-xs text-brand-600 hover:underline disabled:opacity-50"
+              onClick={() => addItem(g.section)}
+              className="mt-2 text-xs text-brand-600 hover:underline"
             >
-              {genIndex === i ? "生成中…" : "AI 生成答案"}
+              + 添加一问一答
             </button>
           </div>
         ))}
       </div>
       <button
         type="button"
-        onClick={() => onChange([...items, emptyQa()])}
-        className="mt-2 text-sm text-brand-600 hover:underline"
+        onClick={addRound}
+        className="mt-3 rounded-lg border border-brand-500 px-3 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
       >
-        + 添加一条问答
+        + 添加一个轮次
       </button>
     </div>
   );
@@ -525,14 +589,24 @@ export function AiImportPanel({
                     className={inputCls}
                   />
                   {type === "knowledge" && (
-                    <MarkdownTextarea
-                      value={d.content_md}
-                      onChange={(v) => update(i, { content_md: v })}
-                      placeholder="正文（Markdown）"
-                      rows={4}
-                      className={inputCls}
-                      hint={false}
-                    />
+                    <>
+                      <MarkdownTextarea
+                        value={d.content_md}
+                        onChange={(v) => update(i, { content_md: v })}
+                        placeholder="正文（Markdown，可点下方 AI 生成后人工确认）"
+                        rows={4}
+                        className={inputCls}
+                        hint={false}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => generateAnswer(i)}
+                        disabled={d.completing}
+                        className="text-xs text-brand-600 hover:underline disabled:opacity-50"
+                      >
+                        {d.completing ? "生成中…" : "AI 生成答案（以标题为题）"}
+                      </button>
+                    </>
                   )}
                   {type === "sql" && (
                     <>
@@ -626,6 +700,32 @@ export function ContentForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(editingId != null);
+  const [genMain, setGenMain] = useState(false);
+
+  // 八股 / SQL 一键 AI 生成答案：八股以「标题」为题写入正文；SQL 以「题干」为题写入参考答案。
+  async function generateMain() {
+    const token = getAccessToken();
+    if (!token) return;
+    const question = type === "sql" ? str(values.prompt_md) : str(values.title);
+    if (!question.trim()) {
+      setError(type === "sql" ? "请先填写题干，再生成答案" : "请先填写标题，再生成答案");
+      return;
+    }
+    const field = type === "sql" ? "answer_md" : "content_md";
+    setGenMain(true);
+    setError(null);
+    try {
+      const { answer } = await completeAnswer(token, { target_type: type, question });
+      setValues((s) => {
+        const existing = str(s[field]);
+        return { ...s, [field]: existing.trim() ? `${existing}\n\n${answer}` : answer };
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setGenMain(false);
+    }
+  }
 
   useEffect(() => {
     const token = getAccessToken();
@@ -783,6 +883,21 @@ export function ContentForm({
               required={f.required}
               className={inputCls}
             />
+          )}
+          {((type === "knowledge" && f.name === "content_md") ||
+            (type === "sql" && f.name === "answer_md")) && (
+            <button
+              type="button"
+              onClick={generateMain}
+              disabled={genMain}
+              className="mt-1 text-xs text-brand-600 hover:underline disabled:opacity-50"
+            >
+              {genMain
+                ? "生成中…"
+                : type === "sql"
+                  ? "AI 生成答案（以题干为题）"
+                  : "AI 生成答案（以标题为题）"}
+            </button>
           )}
         </label>
       ))}
