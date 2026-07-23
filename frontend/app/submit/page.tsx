@@ -75,6 +75,29 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
+type RoundSection = InterviewQAInput["section"];
+
+// 面经问答按轮次分组：一个轮次选一次，下面挂多条问答。
+interface QaGroup {
+  section: RoundSection;
+  items: { question: string; answer: string; completing?: boolean }[];
+}
+
+const ROUND_OPTIONS: { value: RoundSection; label: string }[] = [
+  { value: "round1", label: "一面" },
+  { value: "round2", label: "二面" },
+  { value: "round3", label: "三面" },
+  { value: "hr", label: "HR面" },
+];
+
+const ROUND_LABEL: Record<string, string> = Object.fromEntries(
+  ROUND_OPTIONS.map((r) => [r.value, r.label]),
+);
+
+function defaultQaGroups(): QaGroup[] {
+  return [{ section: "round1", items: [{ question: "", answer: "" }] }];
+}
+
 const TYPE_LABELS: Record<TargetType, string> = {
   knowledge: "八股知识",
   sql: "SQL 题目",
@@ -168,7 +191,7 @@ function SubmitInner() {
   const [targetType, setTargetType] = useState<TargetType>("knowledge");
   const [title, setTitle] = useState("");
   const [raw, setRaw] = useState("");
-  const [promptMd, setPromptMd] = useState("");
+  const [completingMain, setCompletingMain] = useState(false);
   const [difficulty, setDifficulty] = useState("medium");
   const [tags, setTags] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -176,9 +199,7 @@ function SubmitInner() {
   const [interviewType, setInterviewType] = useState<
     "social" | "campus" | "daily" | "summer"
   >("campus");
-  const [qaItems, setQaItems] = useState<InterviewQAInput[]>([
-    { section: "round1", question: "", answer: "" },
-  ]);
+  const [qaGroups, setQaGroups] = useState<QaGroup[]>(defaultQaGroups());
   const [level, setLevel] = useState("basic");
   const [categoryId, setCategoryId] = useState("");
   const [folders, setFolders] = useState<FolderOption[]>([]);
@@ -273,16 +294,44 @@ function SubmitInner() {
     }
   }
 
-  function updateQa(index: number, patch: Partial<InterviewQAInput>) {
-    setQaItems((prev) => prev.map((q, i) => (i === index ? { ...q, ...patch } : q)));
+  function setGroupSection(gi: number, section: RoundSection) {
+    setQaGroups((prev) => prev.map((g, i) => (i === gi ? { ...g, section } : g)));
   }
 
-  function addQa(section: InterviewQAInput["section"]) {
-    setQaItems((prev) => [...prev, { section, question: "", answer: "" }]);
+  function updateItem(gi: number, ii: number, patch: Partial<QaGroup["items"][number]>) {
+    setQaGroups((prev) =>
+      prev.map((g, i) =>
+        i === gi
+          ? { ...g, items: g.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) }
+          : g,
+      ),
+    );
   }
 
-  function removeQa(index: number) {
-    setQaItems((prev) => prev.filter((_, i) => i !== index));
+  function addItem(gi: number) {
+    setQaGroups((prev) =>
+      prev.map((g, i) =>
+        i === gi ? { ...g, items: [...g.items, { question: "", answer: "" }] } : g,
+      ),
+    );
+  }
+
+  function removeItem(gi: number, ii: number) {
+    setQaGroups((prev) =>
+      prev.map((g, i) => (i === gi ? { ...g, items: g.items.filter((_, j) => j !== ii) } : g)),
+    );
+  }
+
+  function addRound() {
+    setQaGroups((prev) => {
+      const used = new Set(prev.map((g) => g.section));
+      const next = ROUND_OPTIONS.find((r) => !used.has(r.value))?.value ?? "hr";
+      return [...prev, { section: next, items: [{ question: "", answer: "" }] }];
+    });
+  }
+
+  function removeRound(gi: number) {
+    setQaGroups((prev) => prev.filter((_, i) => i !== gi));
   }
 
   async function handleParse(file: File | null) {
@@ -313,13 +362,19 @@ function SubmitInner() {
         }
         const qa = Array.isArray(post.qa_items) ? (post.qa_items as Record<string, unknown>[]) : [];
         if (qa.length > 0) {
-          setQaItems(
-            qa.map((q) => ({
-              section: (["round1", "round2", "round3", "hr"].includes(str(q.section))
-                ? str(q.section)
-                : "round1") as InterviewQAInput["section"],
-              question: str(q.question),
-              answer: str(q.answer),
+          // 按轮次分组（轮次只出现一次），保持一/二/三/HR 顺序。
+          const grouped = new Map<RoundSection, QaGroup["items"]>();
+          for (const q of qa) {
+            const section = (["round1", "round2", "round3", "hr"].includes(str(q.section))
+              ? str(q.section)
+              : "round1") as RoundSection;
+            if (!grouped.has(section)) grouped.set(section, []);
+            grouped.get(section)!.push({ question: str(q.question), answer: str(q.answer) });
+          }
+          setQaGroups(
+            ROUND_OPTIONS.filter((r) => grouped.has(r.value)).map((r) => ({
+              section: r.value,
+              items: grouped.get(r.value)!,
             })),
           );
         }
@@ -378,22 +433,45 @@ function SubmitInner() {
     }
   }
 
-  async function completeQaAnswer(i: number) {
+  async function completeQaAnswer(gi: number, ii: number) {
     const token = getAccessToken();
     if (!token) return;
-    const qa = qaItems[i];
-    if (!qa.question.trim()) {
-      setParseErr("请先填写问题再生成答案");
+    const qa = qaGroups[gi]?.items[ii];
+    if (!qa || !qa.question.trim()) {
+      setError("请先填写问题再生成答案");
       return;
     }
+    updateItem(gi, ii, { completing: true });
     try {
       const { answer } = await completeAnswer(token, {
         target_type: "interview",
         question: qa.question,
       });
-      updateQa(i, { answer });
+      updateItem(gi, ii, { answer, completing: false });
     } catch (e) {
-      setParseErr(e instanceof ApiError ? e.message : "生成失败");
+      updateItem(gi, ii, { completing: false });
+      setError(e instanceof ApiError ? e.message : "生成失败");
+    }
+  }
+
+  // 八股 / SQL 人工单独上传：用标题作为问题，让大模型生成正文/解答。
+  async function completeMainAnswer() {
+    const token = getAccessToken();
+    if (!token) return;
+    const question = title.trim();
+    if (!question) {
+      setError("请先填写标题，再用它作为问题生成答案");
+      return;
+    }
+    setCompletingMain(true);
+    setError(null);
+    try {
+      const { answer } = await completeAnswer(token, { target_type: targetType, question });
+      setRaw((p) => (p.trim() ? `${p}\n\n${answer}` : answer));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "生成失败");
+    } finally {
+      setCompletingMain(false);
     }
   }
 
@@ -451,7 +529,8 @@ function SubmitInner() {
       // 面经无标题/无整体感受：标题回落为企业名，正文置空
       title: targetType === "interview" ? companyName : title,
       raw_content: targetType === "interview" ? "" : raw,
-      prompt_md: targetType === "sql" ? promptMd : undefined,
+      // SQL 已合并「题目」到「标题」：标题即题干。
+      prompt_md: targetType === "sql" ? title : undefined,
       difficulty: targetType === "sql" ? difficulty : undefined,
       tags: targetType === "sql" ? tags : undefined,
       company_name: targetType === "interview" ? companyName : undefined,
@@ -459,7 +538,15 @@ function SubmitInner() {
       interview_type: targetType === "interview" ? interviewType : undefined,
       qa_items:
         targetType === "interview"
-          ? qaItems.filter((q) => q.question.trim() || q.answer.trim())
+          ? qaGroups.flatMap((g) =>
+              g.items
+                .filter((it) => it.question.trim() || it.answer.trim())
+                .map((it) => ({
+                  section: g.section,
+                  question: it.question,
+                  answer: it.answer,
+                })),
+            )
           : undefined,
       level: targetType === "project" ? level : undefined,
       access_type: targetType === "project" ? accessType : undefined,
@@ -480,10 +567,9 @@ function SubmitInner() {
       );
       setTitle("");
       setRaw("");
-      setPromptMd("");
       setImplementation("");
       setPosition("");
-      setQaItems([{ section: "round1", question: "", answer: "" }]);
+      setQaGroups(defaultQaGroups());
       loadMine();
       await refreshUser();
     } catch (err) {
@@ -698,23 +784,30 @@ function SubmitInner() {
 
         {targetType !== "interview" && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">标题</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} required className={inputCls} />
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              {targetType === "sql" ? "标题 / 题目" : "标题"}
+            </label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder={
+                targetType === "sql"
+                  ? "简明描述题目，如：连续登录 N 天的用户"
+                  : targetType === "knowledge"
+                    ? "知识点，如：Hive 内部表与外部表的区别"
+                    : undefined
+              }
+              className={inputCls}
+            />
+            {targetType === "sql" && (
+              <p className="mt-1 text-xs text-slate-400">标题即题目描述，无需再单独填写题干。</p>
+            )}
           </div>
         )}
 
         {targetType === "sql" && (
           <>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">题目</label>
-              <textarea
-                value={promptMd}
-                onChange={(e) => setPromptMd(e.target.value)}
-                rows={3}
-                required
-                className={inputCls}
-              />
-            </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-slate-700">难度</label>
@@ -782,67 +875,94 @@ function SubmitInner() {
             </div>
 
             <div className="rounded-lg border border-slate-200 p-3">
-              <p className="mb-2 text-sm font-medium text-slate-700">
-                面试问答（上传时选择所属轮次，并分别填写问题与答案）
+              <p className="mb-3 text-sm font-medium text-slate-700">
+                面试问答（每个轮次只需选择一次，下面依次填写该轮的问题与答案）
               </p>
-              <div className="space-y-3">
-                {qaItems.map((qa, i) => (
-                  <div key={i} className="rounded-md bg-slate-50 p-3">
+              <div className="space-y-4">
+                {qaGroups.map((g, gi) => (
+                  <div key={gi} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                     <div className="mb-2 flex items-center gap-2">
+                      <span className="text-xs text-slate-500">轮次</span>
                       <select
-                        value={qa.section}
-                        onChange={(e) =>
-                          updateQa(i, { section: e.target.value as InterviewQAInput["section"] })
-                        }
-                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                        value={g.section}
+                        onChange={(e) => setGroupSection(gi, e.target.value as RoundSection)}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium"
                       >
-                        <option value="round1">一面</option>
-                        <option value="round2">二面</option>
-                        <option value="round3">三面</option>
-                        <option value="hr">HR面</option>
+                        {ROUND_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
                       </select>
-                      <span className="text-xs text-slate-400">第 {i + 1} 条</span>
-                      {qaItems.length > 1 && (
+                      {qaGroups.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeQa(i)}
+                          onClick={() => removeRound(gi)}
                           className="ml-auto text-xs text-red-500 hover:underline"
                         >
-                          删除
+                          删除该轮次
                         </button>
                       )}
                     </div>
-                    <input
-                      value={qa.question}
-                      onChange={(e) => updateQa(i, { question: e.target.value })}
-                      placeholder="问题"
-                      className={`${inputCls} mb-2`}
-                    />
-                    <MarkdownTextarea
-                      value={qa.answer}
-                      onChange={(v) => updateQa(i, { answer: v })}
-                      placeholder="答案 / 参考回答（可选，可点下方 AI 生成后人工确认）"
-                      rows={2}
-                      className={inputCls}
-                      hint={false}
-                    />
+                    <div className="space-y-3">
+                      {g.items.map((it, ii) => (
+                        <div key={ii} className="rounded-md bg-white p-3 ring-1 ring-slate-200">
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className="text-xs text-slate-400">
+                              {ROUND_LABEL[g.section]} · 第 {ii + 1} 题
+                            </span>
+                            {g.items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeItem(gi, ii)}
+                                className="ml-auto text-xs text-red-500 hover:underline"
+                              >
+                                删除
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            value={it.question}
+                            onChange={(e) => updateItem(gi, ii, { question: e.target.value })}
+                            placeholder="问题"
+                            className={`${inputCls} mb-2`}
+                          />
+                          <MarkdownTextarea
+                            value={it.answer}
+                            onChange={(v) => updateItem(gi, ii, { answer: v })}
+                            placeholder="答案 / 参考回答（可选，可点下方 AI 生成后人工确认）"
+                            rows={2}
+                            className={inputCls}
+                            hint={false}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => completeQaAnswer(gi, ii)}
+                            disabled={it.completing}
+                            className="mt-1 text-xs text-brand-600 hover:underline disabled:opacity-50"
+                          >
+                            {it.completing ? "生成中…" : "AI 生成答案"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => completeQaAnswer(i)}
-                      className="mt-1 text-xs text-brand-600 hover:underline"
+                      onClick={() => addItem(gi)}
+                      className="mt-2 text-sm text-brand-600 hover:underline"
                     >
-                      AI 生成答案
+                      + 添加一道问答
                     </button>
                   </div>
                 ))}
               </div>
-              <div className="mt-2">
+              <div className="mt-3">
                 <button
                   type="button"
-                  onClick={() => addQa("round1")}
-                  className="text-sm text-brand-600 hover:underline"
+                  onClick={addRound}
+                  className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50"
                 >
-                  + 添加一条问答
+                  + 添加一个轮次
                 </button>
               </div>
             </div>
@@ -897,11 +1017,33 @@ function SubmitInner() {
           </>
         )}
 
-        {targetType !== "interview" && (
+        {(targetType === "knowledge" || targetType === "sql") && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              {targetType === "sql" ? "解答 / 思路（原始内容）" : "正文（原始内容）"}
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700">
+                {targetType === "sql" ? "解答 / 思路" : "正文"}
+              </label>
+              <button
+                type="button"
+                onClick={completeMainAnswer}
+                disabled={completingMain}
+                className="rounded-lg border border-brand-500 px-2 py-1 text-xs text-brand-600 hover:bg-brand-50 disabled:opacity-50"
+              >
+                {completingMain ? "生成中…" : "AI 生成答案"}
+              </button>
+            </div>
+            <MarkdownTextarea value={raw} onChange={setRaw} rows={6} required className={inputCls} />
+            <p className="mt-1 text-xs text-slate-400">
+              {targetType === "sql"
+                ? "可先填标题，点「AI 生成答案」由大模型生成解题思路与 SQL，再人工确认。"
+                : "可先填标题，点「AI 生成答案」由大模型生成讲解，再人工确认。"}
+            </p>
+          </div>
+        )}
+
+        {targetType === "project" && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">正文（原始内容）</label>
             <FileImportField onInsert={(t) => setRaw((p) => (p ? `${p}\n\n${t}` : t))} />
             <MarkdownTextarea value={raw} onChange={setRaw} rows={6} required className={inputCls} />
           </div>
