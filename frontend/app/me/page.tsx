@@ -69,12 +69,6 @@ function MeInner() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/me/recharge"
-            className="rounded-lg border border-brand-500 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
-          >
-            充值积分
-          </Link>
-          <Link
             href="/me/applications"
             className="rounded-lg border border-brand-500 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
           >
