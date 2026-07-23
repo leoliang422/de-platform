@@ -30,6 +30,8 @@ class Order(Base):
     item_type: Mapped[str] = mapped_column(String(20), nullable=False)
     item_id: Mapped[int] = mapped_column(Integer, nullable=False)
     amount_cash: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    # 充值订单（item_type="recharge"）确认到账后应发放的积分数；内容解锁订单为空。
+    points_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     provider: Mapped[str] = mapped_column(String(20), default="mock", nullable=False)
     provider_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)

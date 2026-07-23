@@ -3,9 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.modules.payment import recharge as recharge_service
 from app.modules.payment.provider import PaymentNotConfigured, get_payment_provider
+from app.modules.payment.recharge import RechargeService
 from app.modules.payment.repository import PaymentRepository
-from app.modules.payment.schemas import EntitlementOut, UnlockIn, UnlockResult
+from app.modules.payment.schemas import (
+    EntitlementOut,
+    RechargeConfigOut,
+    RechargeCreateIn,
+    RechargeOrderOut,
+    RechargePackage,
+    UnlockIn,
+    UnlockResult,
+)
 from app.modules.payment.service import PaymentService
 from app.modules.users.models import User
 
@@ -78,3 +88,31 @@ async def my_entitlements(
 ) -> list[EntitlementOut]:
     items = await PaymentRepository(db).list_entitlements(current_user.id)
     return [EntitlementOut.model_validate(e) for e in items]
+
+
+# ---- 积分充值（人工确认）----
+@router.get("/recharge/config", response_model=RechargeConfigOut)
+async def recharge_config() -> RechargeConfigOut:
+    return RechargeConfigOut(
+        qr_url=recharge_service.qr_url(),
+        packages=[RechargePackage(**p) for p in recharge_service.list_packages()],
+    )
+
+
+@router.post("/recharge", response_model=RechargeOrderOut, status_code=status.HTTP_201_CREATED)
+async def create_recharge(
+    data: RechargeCreateIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RechargeOrderOut:
+    order = await RechargeService(db).create(current_user.id, data.package_id)
+    return RechargeOrderOut.model_validate(order)
+
+
+@router.get("/recharge/me", response_model=list[RechargeOrderOut])
+async def my_recharge_orders(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[RechargeOrderOut]:
+    orders = await RechargeService(db).list_mine(current_user.id)
+    return [RechargeOrderOut.model_validate(o) for o in orders]

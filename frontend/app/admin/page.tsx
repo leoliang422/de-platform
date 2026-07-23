@@ -9,13 +9,17 @@ import { RequireAuth } from "@/components/guard";
 import {
   type AdminConversation,
   adminApprove,
+  adminConfirmRecharge,
   adminGetUserAccess,
+  adminListRechargeOrders,
   adminListSubmissions,
   adminListUsers,
   adminReject,
+  adminRejectRecharge,
   adminSetModuleAccess,
   adminSetProjectAccess,
   adminUpdateUser,
+  type AdminRechargeOrder,
   type AdminSubmission,
   type AdminUser,
   type AdminUserAccess,
@@ -89,11 +93,107 @@ function AdminInner() {
         </div>
       )}
 
+      <RechargeReview />
+
       <FolderManager />
 
       <UserManager />
 
       <AdminMessages />
+    </div>
+  );
+}
+
+function RechargeReview() {
+  const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    adminListRechargeOrders(token, "pending")
+      .then(setOrders)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function confirm(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("确认已收到该笔款项？确认后将立即为用户发放积分。")) return;
+    setBusyId(id);
+    try {
+      await adminConfirmRecharge(token, id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "确认失败");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("驳回该充值申请？")) return;
+    setBusyId(id);
+    try {
+      await adminRejectRecharge(token, id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "驳回失败");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="mt-10">
+      <h2 className="mb-3 text-lg font-semibold text-slate-900">充值审核</h2>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {orders.length === 0 ? (
+        <p className="text-sm text-slate-400">当前没有待确认的充值申请。</p>
+      ) : (
+        <div className="space-y-3">
+          {orders.map((o) => (
+            <div
+              key={o.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm"
+            >
+              <div>
+                <div className="font-medium text-slate-900">
+                  {o.user_nickname}
+                  <span className="ml-2 text-xs text-slate-400">{o.user_email}</span>
+                </div>
+                <div className="mt-1 text-slate-600">
+                  订单 #{o.id} · ¥{o.amount_cash} · 到账 {o.points_delta ?? 0} 积分 ·{" "}
+                  {new Date(o.created_at).toLocaleString()}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => confirm(o.id)}
+                  disabled={busyId === o.id}
+                  className="rounded-lg bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  确认到账
+                </button>
+                <button
+                  onClick={() => reject(o.id)}
+                  disabled={busyId === o.id}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  驳回
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

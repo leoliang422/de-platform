@@ -58,3 +58,16 @@ class AdminUserAccessOut(BaseModel):
     user_id: int
     modules: list[ModuleAccessItem]
     projects: list[ProjectAccessItem]
+
+
+class AdminRechargeOrderOut(BaseModel):
+    """管理员视角的充值订单（附用户信息，便于核对到账）。"""
+
+    id: int
+    user_id: int
+    user_nickname: str
+    user_email: str
+    amount_cash: float
+    points_delta: int | None = None
+    status: str
+    created_at: dt.datetime

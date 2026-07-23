@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.deps import require_admin
 from app.modules.access.models import MODULE_UNLOCK_MARKER, ModuleAccessLog
 from app.modules.admin.schemas import (
+    AdminRechargeOrderOut,
     AdminSubmissionOut,
     AdminUserAccessOut,
     AdminUserOut,
@@ -23,6 +24,7 @@ from app.modules.catalog.schemas import (
     FolderTree,
 )
 from app.modules.payment.models import Entitlement
+from app.modules.payment.recharge import RechargeService
 from app.modules.points.models import PointLedger
 from app.modules.projects.models import Project
 from app.modules.submissions.repository import SubmissionRepository
@@ -314,3 +316,54 @@ async def revoke_project_access(
     )
     await db.commit()
     return await _load_user_access(db, user)
+
+
+# ---- 积分充值审核（人工确认）----
+async def _recharge_out(db: AsyncSession, orders: list) -> list[AdminRechargeOrderOut]:
+    ids = {o.user_id for o in orders}
+    users = (
+        {u.id: u for u in (await db.execute(select(User).where(User.id.in_(ids)))).scalars().all()}
+        if ids
+        else {}
+    )
+    result: list[AdminRechargeOrderOut] = []
+    for o in orders:
+        u = users.get(o.user_id)
+        result.append(
+            AdminRechargeOrderOut(
+                id=o.id,
+                user_id=o.user_id,
+                user_nickname=u.nickname if u else "未知用户",
+                user_email=u.email if u else "",
+                amount_cash=float(o.amount_cash),
+                points_delta=o.points_delta,
+                status=o.status,
+                created_at=o.created_at,
+            )
+        )
+    return result
+
+
+@router.get("/recharge-orders", response_model=list[AdminRechargeOrderOut])
+async def list_recharge_orders(
+    status_filter: str | None = Query(default="pending", alias="status"),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminRechargeOrderOut]:
+    orders = await RechargeService(db).list_for_admin(status_filter or None)
+    return await _recharge_out(db, orders)
+
+
+@router.post("/recharge-orders/{order_id}/confirm", response_model=AdminRechargeOrderOut)
+async def confirm_recharge_order(
+    order_id: int, db: AsyncSession = Depends(get_db)
+) -> AdminRechargeOrderOut:
+    order = await RechargeService(db).confirm(order_id)
+    return (await _recharge_out(db, [order]))[0]
+
+
+@router.post("/recharge-orders/{order_id}/reject", response_model=AdminRechargeOrderOut)
+async def reject_recharge_order(
+    order_id: int, db: AsyncSession = Depends(get_db)
+) -> AdminRechargeOrderOut:
+    order = await RechargeService(db).reject(order_id)
+    return (await _recharge_out(db, [order]))[0]

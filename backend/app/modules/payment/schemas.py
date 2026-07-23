@@ -33,3 +33,29 @@ class UnlockResult(BaseModel):
     order_id: int | None = None
     pay_url: str | None = None
     qr_code: str | None = None
+
+
+# ---- 积分充值（人工确认）----
+class RechargePackage(BaseModel):
+    id: int  # 套餐在配置中的序号（从 0 开始）
+    amount: int  # 人民币（元）
+    points: int  # 到账积分
+
+
+class RechargeConfigOut(BaseModel):
+    qr_url: str
+    packages: list[RechargePackage]
+
+
+class RechargeCreateIn(BaseModel):
+    package_id: int
+
+
+class RechargeOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount_cash: float
+    points_delta: int | None = None
+    status: str  # pending（待确认）| paid（已到账）| failed（已驳回）
+    created_at: dt.datetime
