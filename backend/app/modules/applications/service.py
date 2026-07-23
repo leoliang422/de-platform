@@ -15,10 +15,13 @@ from app.modules.applications.schemas import (
     CalendarEventCreate,
     CalendarEventUpdate,
     ListCreate,
+    ListOut,
     ListUpdate,
     RecordCreate,
+    RecordOut,
     RecordUpdate,
 )
+from app.modules.interview.models import Company, InterviewPost
 
 
 def _month_range(month: str | None) -> tuple[dt.date, dt.date] | None:
@@ -41,13 +44,41 @@ class ApplicationService:
         self.db = db
 
     # ---- 列表 ----
-    async def list_lists(self, user_id: int) -> list[ApplicationList]:
+    async def _authored_company_map(self, user_id: int) -> dict[str, int]:
+        """当前用户投过面经的「公司名(归一化) → 公司 id」映射，用于投递记录关联面经。"""
+        rows = await self.db.execute(
+            select(Company.name, InterviewPost.company_id)
+            .join(InterviewPost, InterviewPost.company_id == Company.id)
+            .where(InterviewPost.author_id == user_id)
+        )
+        result: dict[str, int] = {}
+        for name, company_id in rows.all():
+            key = (name or "").strip().lower()
+            if key:
+                result[key] = company_id
+        return result
+
+    async def list_lists(self, user_id: int) -> list[ListOut]:
         result = await self.db.execute(
             select(ApplicationList)
             .where(ApplicationList.user_id == user_id)
             .order_by(ApplicationList.order_index, ApplicationList.id)
         )
-        return list(result.scalars().all())
+        lists = list(result.scalars().all())
+        # 关联本人面经：给每条记录填上 interview_company_id（有则前端可直接跳转面经）。
+        company_map = await self._authored_company_map(user_id)
+        out: list[ListOut] = []
+        for lst in lists:
+            records: list[RecordOut] = []
+            for rec in lst.records:
+                ro = RecordOut.model_validate(rec)
+                key = (rec.company_name or "").strip().lower()
+                ro.interview_company_id = company_map.get(key) if key else None
+                records.append(ro)
+            out.append(
+                ListOut(id=lst.id, name=lst.name, order_index=lst.order_index, records=records)
+            )
+        return out
 
     async def _get_list(self, user_id: int, list_id: int) -> ApplicationList:
         lst = await self.db.get(ApplicationList, list_id)

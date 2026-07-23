@@ -19,6 +19,8 @@ from app.modules.interview.router import router as interview_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.knowledge_tree.router import admin_router as knowledge_tree_admin_router
 from app.modules.knowledge_tree.router import router as knowledge_tree_router
+from app.modules.messages.router import admin_router as messages_admin_router
+from app.modules.messages.router import router as messages_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.payment.router import router as payment_router
 from app.modules.points.router import router as points_router
@@ -84,6 +86,8 @@ app.include_router(notifications_router)
 app.include_router(interactions_router)
 app.include_router(access_router)
 app.include_router(applications_router)
+app.include_router(messages_router)
+app.include_router(messages_admin_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(admin_content_router)

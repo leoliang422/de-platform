@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 Nature = Literal["state", "private", "foreign", "other"]
 ApplicationStatus = Literal[
     "applied",
+    "resume_fail",
+    "written",
+    "written_fail",
     "round1",
     "round1_fail",
     "round2",
@@ -47,6 +50,8 @@ class RecordOut(BaseModel):
     applied_date: dt.date | None = None
     status: str
     order_index: int
+    # 若当前用户为该公司投过面经，则为对应公司 id（前端可直接跳转），否则 None。
+    interview_company_id: int | None = None
 
 
 # ---- 投递列表 ----

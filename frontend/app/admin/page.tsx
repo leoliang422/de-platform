@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PageHeader, Prose } from "@/components/content";
 import { FolderManager } from "@/components/folder-manager";
 import { RequireAuth } from "@/components/guard";
 import {
+  type AdminConversation,
   adminApprove,
   adminGetUserAccess,
   adminListSubmissions,
@@ -14,10 +15,14 @@ import {
   adminSetModuleAccess,
   adminSetProjectAccess,
   adminUpdateUser,
-  getAccessToken,
   type AdminSubmission,
   type AdminUser,
   type AdminUserAccess,
+  type ContactMessage,
+  getAccessToken,
+  getAdminConversation,
+  getAdminConversations,
+  replyToUser,
 } from "@/lib/api";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -86,6 +91,158 @@ function AdminInner() {
       <FolderManager />
 
       <UserManager />
+
+      <AdminMessages />
+    </div>
+  );
+}
+
+function AdminMessages() {
+  const [convs, setConvs] = useState<AdminConversation[]>([]);
+  const [activeUser, setActiveUser] = useState<number | null>(null);
+  const [msgs, setMsgs] = useState<ContactMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const loadConvs = useCallback(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    getAdminConversations(token)
+      .then(setConvs)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadConvs();
+    const timer = setInterval(loadConvs, 20000);
+    return () => clearInterval(timer);
+  }, [loadConvs]);
+
+  const openConv = useCallback((userId: number) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setActiveUser(userId);
+    getAdminConversation(token, userId)
+      .then(setMsgs)
+      .catch(() => setMsgs([]));
+    // 拉取后未读会清零，刷新列表徽标
+    setConvs((prev) => prev.map((c) => (c.user_id === userId ? { ...c, unread: 0 } : c)));
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
+
+  async function handleReply() {
+    const body = draft.trim();
+    if (!body || activeUser == null || sending) return;
+    const token = getAccessToken();
+    if (!token) return;
+    setSending(true);
+    try {
+      const msg = await replyToUser(token, activeUser, body);
+      setMsgs((prev) => [...prev, msg]);
+      setDraft("");
+      loadConvs();
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const activeConv = convs.find((c) => c.user_id === activeUser);
+
+  return (
+    <div className="mt-10">
+      <h2 className="mb-3 text-lg font-semibold text-slate-900">用户私信</h2>
+      <div className="flex h-[26rem] overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {/* 会话列表 */}
+        <div className="w-64 shrink-0 overflow-y-auto border-r border-slate-200">
+          {convs.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">暂无用户私信。</p>
+          ) : (
+            convs.map((c) => (
+              <button
+                key={c.user_id}
+                onClick={() => openConv(c.user_id)}
+                className={`flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left transition hover:bg-slate-50 ${
+                  activeUser === c.user_id ? "bg-brand-50" : ""
+                }`}
+              >
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="truncate text-sm font-medium text-slate-800">
+                      {c.nickname}
+                    </span>
+                    {c.unread > 0 && (
+                      <span className="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                        {c.unread}
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-xs text-slate-400">{c.last_body}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* 对话窗口 */}
+        <div className="flex flex-1 flex-col">
+          {activeUser == null ? (
+            <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+              选择左侧用户开始对话
+            </div>
+          ) : (
+            <>
+              <div className="border-b border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+                {activeConv?.nickname ?? `用户 #${activeUser}`}
+              </div>
+              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                {msgs.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`flex ${m.from_admin ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[75%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
+                        m.from_admin
+                          ? "rounded-tr-sm bg-brand-600 text-white"
+                          : "rounded-tl-sm bg-slate-100 text-slate-800"
+                      }`}
+                    >
+                      {m.body}
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+              <div className="flex items-end gap-2 border-t border-slate-200 p-3">
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleReply();
+                    }
+                  }}
+                  rows={2}
+                  placeholder="回复用户…（⌘/Ctrl + Enter 发送）"
+                  className="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                />
+                <button
+                  onClick={handleReply}
+                  disabled={sending || !draft.trim()}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  发送
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

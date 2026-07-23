@@ -16,9 +16,12 @@ from app.core.database import Base
 # 公司性质。
 COMPANY_NATURES = ("state", "private", "foreign", "other")
 
-# 投递状态（含各面试轮次的「进行中」与「挂」）。
+# 投递状态（含简历/笔试/各面试轮次的「进行中」与「挂」）。
 APPLICATION_STATUSES = (
     "applied",  # 已投递
+    "resume_fail",  # 简历挂
+    "written",  # 笔试中
+    "written_fail",  # 笔试挂
     "round1",  # 一面中
     "round1_fail",  # 一面挂
     "round2",  # 二面中

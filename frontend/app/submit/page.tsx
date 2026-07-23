@@ -224,6 +224,18 @@ function SubmitInner() {
       .catch(() => setCompanyNames([]));
   }, []);
 
+  // 支持从「投递记录」等入口带参预填：?type=interview&company=字节跳动
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("type");
+    if (t && ["knowledge", "sql", "interview", "project"].includes(t)) {
+      setTargetType(t as TargetType);
+    }
+    const company = sp.get("company");
+    if (company) setCompanyName(company);
+  }, []);
+
   // 异步加工时投稿会停留在「加工中」，轮询刷新直到状态流转。
   useEffect(() => {
     if (!mine.some((s) => s.status === "processing")) return;

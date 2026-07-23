@@ -26,8 +26,7 @@ async def list_lists(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[ListOut]:
-    lists = await ApplicationService(db).list_lists(current_user.id)
-    return [ListOut.model_validate(x) for x in lists]
+    return await ApplicationService(db).list_lists(current_user.id)
 
 
 @router.post("/lists", response_model=ListOut, status_code=status.HTTP_201_CREATED)

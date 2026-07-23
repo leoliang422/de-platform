@@ -349,7 +349,7 @@ function AuthorLink({ post }: { post: InterviewCard }) {
     <Link
       href={`/users/${post.author_id}`}
       className="flex items-center gap-2 rounded-full transition hover:opacity-80"
-      title="查看主页 / 私聊"
+      title="查看主页"
     >
       {content}
     </Link>

@@ -292,6 +292,62 @@ export function getUnreadCount(token: string): Promise<{ unread: number }> {
   return authRequest<{ unread: number }>("/notifications/unread_count", token);
 }
 
+// ---- 联系管理员（用户 ↔ 管理员私信） ----
+export interface ContactMessage {
+  id: number;
+  from_admin: boolean;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface AdminConversation {
+  user_id: number;
+  nickname: string;
+  avatar_url: string | null;
+  last_body: string;
+  last_at: string;
+  unread: number;
+}
+
+export function getMyMessages(token: string): Promise<ContactMessage[]> {
+  return authRequest<ContactMessage[]>("/messages", token);
+}
+
+export function getMyMessageUnread(token: string): Promise<{ unread: number }> {
+  return authRequest<{ unread: number }>("/messages/unread_count", token);
+}
+
+export function sendMessageToAdmin(token: string, body: string): Promise<ContactMessage> {
+  return authRequest<ContactMessage>("/messages", token, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function getAdminConversations(token: string): Promise<AdminConversation[]> {
+  return authRequest<AdminConversation[]>("/admin/messages/conversations", token);
+}
+
+export function getAdminMessageUnread(token: string): Promise<{ unread: number }> {
+  return authRequest<{ unread: number }>("/admin/messages/unread_count", token);
+}
+
+export function getAdminConversation(token: string, userId: number): Promise<ContactMessage[]> {
+  return authRequest<ContactMessage[]>(`/admin/messages/${userId}`, token);
+}
+
+export function replyToUser(
+  token: string,
+  userId: number,
+  body: string,
+): Promise<ContactMessage> {
+  return authRequest<ContactMessage>(`/admin/messages/${userId}`, token, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
 export function markNotificationRead(token: string, id: number): Promise<Notification> {
   return authRequest<Notification>(`/notifications/${id}/read`, token, { method: "POST" });
 }
@@ -1147,6 +1203,9 @@ export function adminDeleteContent(
 export type CompanyNature = "state" | "private" | "foreign" | "other";
 export type ApplicationStatus =
   | "applied"
+  | "resume_fail"
+  | "written"
+  | "written_fail"
   | "round1"
   | "round1_fail"
   | "round2"
@@ -1167,6 +1226,9 @@ export const COMPANY_NATURE_LABEL: Record<string, string> = {
 
 export const APPLICATION_STATUS_LABEL: Record<string, string> = {
   applied: "已投递",
+  resume_fail: "简历挂",
+  written: "笔试中",
+  written_fail: "笔试挂",
   round1: "一面中",
   round1_fail: "一面挂",
   round2: "二面中",
@@ -1188,6 +1250,7 @@ export interface ApplicationRecord {
   applied_date: string | null;
   status: ApplicationStatus;
   order_index: number;
+  interview_company_id: number | null;
 }
 
 export interface ApplicationList {

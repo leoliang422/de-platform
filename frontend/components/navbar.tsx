@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { getAccessToken, getUnreadCount } from "@/lib/api";
+import { getAccessToken, getMyMessageUnread, getUnreadCount } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const MODULES: { href: string; label: string }[] = [
@@ -18,10 +18,13 @@ export function Navbar() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
+  const [msgUnread, setMsgUnread] = useState(0);
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     if (!user) {
       setUnread(0);
+      setMsgUnread(0);
       return;
     }
     const poll = () => {
@@ -30,6 +33,11 @@ export function Navbar() {
       getUnreadCount(token)
         .then((r) => setUnread(r.unread))
         .catch(() => {});
+      if (user.role !== "admin") {
+        getMyMessageUnread(token)
+          .then((r) => setMsgUnread(r.unread))
+          .catch(() => {});
+      }
     };
     poll();
     const timer = setInterval(poll, 30000);
@@ -43,6 +51,20 @@ export function Navbar() {
           <Link href="/" className="text-lg font-semibold text-slate-900">
             DE<span className="text-brand-600">Platform</span>
           </Link>
+          {!isAdmin && (
+            <Link
+              href="/contact"
+              className="relative hidden rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition hover:bg-slate-100 sm:inline-flex"
+              title="有问题？联系管理员"
+            >
+              联系管理员
+              {msgUnread > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                  {msgUnread > 99 ? "99+" : msgUnread}
+                </span>
+              )}
+            </Link>
+          )}
           <nav className="flex items-center gap-1 text-sm">
             {MODULES.map((m) => {
               const active = pathname === m.href || pathname.startsWith(`${m.href}/`);

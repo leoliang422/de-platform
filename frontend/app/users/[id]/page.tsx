@@ -55,16 +55,6 @@ export default function PublicProfilePage({
         {profile.bio && (
           <p className="mt-4 whitespace-pre-wrap text-sm text-slate-600">{profile.bio}</p>
         )}
-
-        <div className="mt-6">
-          <button
-            disabled
-            title="私聊功能即将上线"
-            className="cursor-not-allowed rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400"
-          >
-            私聊（即将上线）
-          </button>
-        </div>
       </div>
     </div>
   );

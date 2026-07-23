@@ -26,6 +26,7 @@ from app.modules.interview.models import (  # noqa: F401
 )
 from app.modules.knowledge.models import KnowledgeItem  # noqa: F401
 from app.modules.knowledge_tree.models import KnowledgeNode  # noqa: F401
+from app.modules.messages.models import ContactMessage  # noqa: F401
 from app.modules.notifications.models import Notification  # noqa: F401
 from app.modules.payment.models import Entitlement, Order  # noqa: F401
 from app.modules.points.models import PointLedger  # noqa: F401

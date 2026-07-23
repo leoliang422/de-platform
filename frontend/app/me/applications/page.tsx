@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BackLink, PageHeader } from "@/components/content";
@@ -34,10 +35,13 @@ export default function ApplicationsPage() {
 // 状态徽标配色：进行中=琥珀，挂/拒=红，Offer=绿，已投递=蓝。
 const STATUS_STYLE: Record<string, string> = {
   applied: "bg-sky-100 text-sky-700",
+  written: "bg-amber-100 text-amber-800",
   round1: "bg-amber-100 text-amber-800",
   round2: "bg-amber-100 text-amber-800",
   round3: "bg-amber-100 text-amber-800",
   hr: "bg-amber-100 text-amber-800",
+  resume_fail: "bg-red-100 text-red-700",
+  written_fail: "bg-red-100 text-red-700",
   round1_fail: "bg-red-100 text-red-700",
   round2_fail: "bg-red-100 text-red-700",
   round3_fail: "bg-red-100 text-red-700",
@@ -207,13 +211,14 @@ function ApplicationsInner() {
                       <th className="px-2 py-2">岗位名称</th>
                       <th className="w-36 px-2 py-2">投递时间</th>
                       <th className="w-32 px-2 py-2">投递状态</th>
+                      <th className="w-24 px-2 py-2">面经</th>
                       <th className="w-12 px-2 py-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {active.records.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-2 py-6 text-center text-xs text-slate-400">
+                        <td colSpan={8} className="px-2 py-6 text-center text-xs text-slate-400">
                           暂无记录，点击下方「+ 添加一行」新增。
                         </td>
                       </tr>
@@ -327,6 +332,29 @@ function RecordRow({
             </option>
           ))}
         </select>
+      </td>
+      <td className="px-2 py-1">
+        {rec.interview_company_id ? (
+          <Link
+            href={`/interview/${rec.interview_company_id}`}
+            className="text-xs font-medium text-brand-600 hover:underline"
+            title="查看你为该公司上传的面经"
+          >
+            查看面经 →
+          </Link>
+        ) : (company || rec.company_name).trim() ? (
+          <Link
+            href={`/submit?type=interview&company=${encodeURIComponent(
+              (company || rec.company_name).trim(),
+            )}`}
+            className="text-xs text-slate-400 hover:text-brand-600 hover:underline"
+            title="还没这家公司的面经，去上传一份（可获得积分）"
+          >
+            + 上传面经
+          </Link>
+        ) : (
+          <span className="text-xs text-slate-300">—</span>
+        )}
       </td>
       <td className="px-2 py-1 text-center">
         <button
