@@ -95,7 +95,7 @@ async def my_entitlements(
 async def recharge_config(db: AsyncSession = Depends(get_db)) -> RechargeConfigOut:
     return RechargeConfigOut(
         qr_url=await recharge_service.get_qr_url(db),
-        packages=[RechargePackage(**p) for p in recharge_service.list_packages()],
+        packages=[RechargePackage(**p) for p in await recharge_service.list_packages(db)],
     )
 
 

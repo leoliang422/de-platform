@@ -26,11 +26,12 @@ import {
   type AdminUser,
   type AdminUserAccess,
   type ContactMessage,
+  adminGetPointsConfig,
+  adminSetPointsConfig,
   getAccessToken,
   getAdminConversation,
   getAdminConversations,
-  getRechargeConfig,
-  type RechargeConfig,
+  type PointsConfig,
   replyToUser,
   uploadImage,
 } from "@/lib/api";
@@ -301,50 +302,178 @@ function SystemSettings() {
 }
 
 function PointsRules() {
-  const [cfg, setCfg] = useState<RechargeConfig | null>(null);
+  const [cfg, setCfg] = useState<PointsConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getRechargeConfig()
+    const token = getAccessToken();
+    if (!token) return;
+    adminGetPointsConfig(token)
       .then(setCfg)
-      .catch(() => setCfg(null));
+      .catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
   }, []);
+
+  function patch(p: Partial<PointsConfig>) {
+    setCfg((prev) => (prev ? { ...prev, ...p } : prev));
+  }
+
+  function patchPackage(i: number, field: "amount" | "points", value: number) {
+    setCfg((prev) =>
+      prev
+        ? {
+            ...prev,
+            packages: prev.packages.map((pk, idx) =>
+              idx === i ? { ...pk, [field]: value } : pk,
+            ),
+          }
+        : prev,
+    );
+  }
+
+  function addPackage() {
+    setCfg((prev) =>
+      prev ? { ...prev, packages: [...prev.packages, { amount: 0, points: 0 }] } : prev,
+    );
+  }
+
+  function removePackage(i: number) {
+    setCfg((prev) =>
+      prev ? { ...prev, packages: prev.packages.filter((_, idx) => idx !== i) } : prev,
+    );
+  }
+
+  async function save() {
+    const token = getAccessToken();
+    if (!token || !cfg) return;
+    // 过滤掉金额/积分非正的空行，避免后端 422。
+    const packages = cfg.packages.filter((p) => p.amount > 0 && p.points > 0);
+    setSaving(true);
+    setMsg(null);
+    setError(null);
+    try {
+      const saved = await adminSetPointsConfig(token, { ...cfg, packages });
+      setCfg(saved);
+      setMsg("已保存，全站即时生效。");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const numCls =
+    "w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none";
 
   return (
     <div>
       <h2 className="mb-1 text-lg font-semibold text-slate-900">积分规则</h2>
       <p className="mb-4 text-xs text-slate-500">
-        八股全部免费；SQL / 面经 每人可免费查看前 10 条，超出后一次性用积分解锁整个模块；项目按单项积分解锁。
-        免费额度与充值套餐由后端配置（环境变量）设定，如需在后台在线编辑可告诉我扩展。
+        八股全部免费；SQL / 面经按下方免费额度试看，超出后一次性用积分解锁整个模块；项目按单项积分解锁。
+        修改保存后全站即时生效（管理员不受免费额度限制）。
       </p>
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">充值套餐</h3>
-        {!cfg ? (
-          <p className="text-sm text-slate-400">加载中…</p>
-        ) : cfg.packages.length === 0 ? (
-          <p className="text-sm text-slate-400">未配置充值套餐。</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">套餐</th>
-                  <th className="px-3 py-2">金额（元）</th>
-                  <th className="px-3 py-2">到账积分</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {cfg.packages.map((p, i) => (
-                  <tr key={p.id}>
-                    <td className="px-3 py-2 text-slate-400">#{i + 1}</td>
-                    <td className="px-3 py-2 text-slate-700">¥{p.amount}</td>
-                    <td className="px-3 py-2 font-medium text-slate-800">{p.points}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+      {!cfg ? (
+        <p className="text-sm text-slate-400">{error ?? "加载中…"}</p>
+      ) : (
+        <div className="space-y-6">
+          <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-3">
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-700">免费额度（条/模块）</span>
+              <input
+                type="number"
+                min={0}
+                value={cfg.free_module_quota}
+                onChange={(e) => patch({ free_module_quota: Number(e.target.value) })}
+                className={numCls}
+              />
+              <span className="mt-1 block text-xs text-slate-400">SQL / 面经每人免费查看条数</span>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-700">SQL 模块解锁积分</span>
+              <input
+                type="number"
+                min={0}
+                value={cfg.sql_module_unlock_points}
+                onChange={(e) => patch({ sql_module_unlock_points: Number(e.target.value) })}
+                className={numCls}
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-700">面经模块解锁积分</span>
+              <input
+                type="number"
+                min={0}
+                value={cfg.interview_module_unlock_points}
+                onChange={(e) => patch({ interview_module_unlock_points: Number(e.target.value) })}
+                className={numCls}
+              />
+            </label>
           </div>
-        )}
-      </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">充值套餐（金额 → 到账积分）</h3>
+              <button
+                type="button"
+                onClick={addPackage}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                + 添加套餐
+              </button>
+            </div>
+            {cfg.packages.length === 0 ? (
+              <p className="text-sm text-slate-400">暂无套餐，点右上「+ 添加套餐」。</p>
+            ) : (
+              <div className="space-y-2">
+                {cfg.packages.map((p, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-slate-400">#{i + 1}</span>
+                    <span className="text-slate-500">¥</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={p.amount}
+                      onChange={(e) => patchPackage(i, "amount", Number(e.target.value))}
+                      className={numCls}
+                    />
+                    <span className="text-slate-500">→</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={p.points}
+                      onChange={(e) => patchPackage(i, "points", Number(e.target.value))}
+                      className={numCls}
+                    />
+                    <span className="text-slate-400">积分</span>
+                    <button
+                      type="button"
+                      onClick={() => removePackage(i)}
+                      className="ml-1 text-xs text-red-500 hover:underline"
+                    >
+                      删除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {saving ? "保存中…" : "保存积分规则"}
+            </button>
+            {msg && <span className="text-sm text-green-600">{msg}</span>}
+            {error && <span className="text-sm text-red-600">{error}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

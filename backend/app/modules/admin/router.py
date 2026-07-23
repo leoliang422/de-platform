@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import require_admin
 from app.modules.access.models import MODULE_UNLOCK_MARKER, ModuleAccessLog
@@ -12,6 +13,9 @@ from app.modules.admin.schemas import (
     AdminUserOut,
     AdminUserUpdate,
     ModuleAccessItem,
+    PointsConfigIn,
+    PointsConfigOut,
+    PointsPackage,
     ProjectAccessItem,
     RechargeQrIn,
     RechargeQrOut,
@@ -26,10 +30,22 @@ from app.modules.catalog.schemas import (
     FolderTree,
 )
 from app.modules.payment.models import Entitlement
-from app.modules.payment.recharge import RECHARGE_QR_KEY, RechargeService, get_qr_url
+from app.modules.payment.recharge import (
+    RECHARGE_QR_KEY,
+    RechargeService,
+    get_qr_url,
+    list_packages,
+)
 from app.modules.points.models import PointLedger
 from app.modules.projects.models import Project
-from app.modules.settings.service import set_setting
+from app.modules.settings.service import (
+    KEY_FREE_QUOTA,
+    KEY_INTERVIEW_UNLOCK,
+    KEY_RECHARGE_PACKAGES,
+    KEY_SQL_UNLOCK,
+    get_int_setting,
+    set_setting,
+)
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import ApproveIn, RejectIn, SubmissionOut
 from app.modules.submissions.service import SubmissionService
@@ -383,3 +399,37 @@ async def get_recharge_qr(db: AsyncSession = Depends(get_db)) -> RechargeQrOut:
 async def set_recharge_qr(data: RechargeQrIn, db: AsyncSession = Depends(get_db)) -> RechargeQrOut:
     await set_setting(db, RECHARGE_QR_KEY, data.url.strip())
     return RechargeQrOut(url=data.url.strip())
+
+
+# ---- 积分规则（免费额度 / 模块解锁积分 / 充值套餐）后台可编辑 ----
+async def _points_config(db: AsyncSession) -> PointsConfigOut:
+    s = get_settings()
+    return PointsConfigOut(
+        free_module_quota=await get_int_setting(db, KEY_FREE_QUOTA, s.free_module_quota),
+        sql_module_unlock_points=await get_int_setting(
+            db, KEY_SQL_UNLOCK, s.sql_module_unlock_points
+        ),
+        interview_module_unlock_points=await get_int_setting(
+            db, KEY_INTERVIEW_UNLOCK, s.interview_module_unlock_points
+        ),
+        packages=[
+            PointsPackage(amount=p["amount"], points=p["points"]) for p in await list_packages(db)
+        ],
+    )
+
+
+@router.get("/points-config", response_model=PointsConfigOut)
+async def get_points_config(db: AsyncSession = Depends(get_db)) -> PointsConfigOut:
+    return await _points_config(db)
+
+
+@router.put("/points-config", response_model=PointsConfigOut)
+async def set_points_config(
+    data: PointsConfigIn, db: AsyncSession = Depends(get_db)
+) -> PointsConfigOut:
+    await set_setting(db, KEY_FREE_QUOTA, str(data.free_module_quota))
+    await set_setting(db, KEY_SQL_UNLOCK, str(data.sql_module_unlock_points))
+    await set_setting(db, KEY_INTERVIEW_UNLOCK, str(data.interview_module_unlock_points))
+    raw = ",".join(f"{p.amount}:{p.points}" for p in data.packages)
+    await set_setting(db, KEY_RECHARGE_PACKAGES, raw)
+    return await _points_config(db)

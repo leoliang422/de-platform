@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AdminSubmissionOut(BaseModel):
@@ -80,3 +80,24 @@ class RechargeQrOut(BaseModel):
 
 class RechargeQrIn(BaseModel):
     url: str
+
+
+class PointsPackage(BaseModel):
+    amount: int = Field(gt=0, le=100000, description="人民币金额（元）")
+    points: int = Field(gt=0, le=1000000, description="到账积分")
+
+
+class PointsConfigOut(BaseModel):
+    """系统配置 · 积分规则（当前生效值）。"""
+
+    free_module_quota: int
+    sql_module_unlock_points: int
+    interview_module_unlock_points: int
+    packages: list[PointsPackage]
+
+
+class PointsConfigIn(BaseModel):
+    free_module_quota: int = Field(ge=0, le=100000)
+    sql_module_unlock_points: int = Field(ge=0, le=1000000)
+    interview_module_unlock_points: int = Field(ge=0, le=1000000)
+    packages: list[PointsPackage] = Field(default_factory=list, max_length=20)

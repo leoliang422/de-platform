@@ -1263,6 +1263,29 @@ export function adminSetRechargeQr(token: string, url: string): Promise<{ url: s
   });
 }
 
+export interface PointsPackage {
+  amount: number;
+  points: number;
+}
+
+export interface PointsConfig {
+  free_module_quota: number;
+  sql_module_unlock_points: number;
+  interview_module_unlock_points: number;
+  packages: PointsPackage[];
+}
+
+export function adminGetPointsConfig(token: string): Promise<PointsConfig> {
+  return authRequest<PointsConfig>("/admin/points-config", token);
+}
+
+export function adminSetPointsConfig(token: string, cfg: PointsConfig): Promise<PointsConfig> {
+  return authRequest<PointsConfig>("/admin/points-config", token, {
+    method: "PUT",
+    body: JSON.stringify(cfg),
+  });
+}
+
 // ---- Admin 内容管理 ----
 export type ContentType = "knowledge" | "sql" | "interview" | "project";
 

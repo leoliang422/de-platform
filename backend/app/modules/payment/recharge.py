@@ -17,15 +17,34 @@ from app.core.config import get_settings
 from app.modules.payment.models import Order
 from app.modules.payment.repository import PaymentRepository
 from app.modules.points.service import PointsService
-from app.modules.settings.service import get_setting
+from app.modules.settings.service import KEY_RECHARGE_PACKAGES, get_setting
 
 # 收款码在 site_settings 中的 key（管理员后台上传后即时生效，优先于环境变量）。
 RECHARGE_QR_KEY = "recharge_qr_url"
 
 
-def list_packages() -> list[dict[str, int]]:
-    """返回配置中的充值套餐，附带序号 id。"""
-    packages = get_settings().recharge_package_list
+def parse_packages(raw: str) -> list[dict[str, int]]:
+    """把 "金额:积分,金额:积分" 解析为套餐列表（与环境变量同格式）。"""
+    packages: list[dict[str, int]] = []
+    for item in (raw or "").split(","):
+        item = item.strip()
+        if not item or ":" not in item:
+            continue
+        amount_str, points_str = item.split(":", 1)
+        try:
+            amount = int(amount_str.strip())
+            points = int(points_str.strip())
+        except ValueError:
+            continue
+        if amount > 0 and points > 0:
+            packages.append({"amount": amount, "points": points})
+    return packages
+
+
+async def list_packages(db: AsyncSession) -> list[dict[str, int]]:
+    """充值套餐（附带序号 id）：优先取后台配置，回退环境变量默认值。"""
+    raw = await get_setting(db, KEY_RECHARGE_PACKAGES)
+    packages = parse_packages(raw) if raw else get_settings().recharge_package_list
     return [{"id": i, **pkg} for i, pkg in enumerate(packages)]
 
 
@@ -41,7 +60,7 @@ class RechargeService:
         self.repo = PaymentRepository(db)
 
     async def create(self, user_id: int, package_id: int, note: str | None = None) -> Order:
-        packages = list_packages()
+        packages = await list_packages(self.db)
         pkg = next((p for p in packages if p["id"] == package_id), None)
         if pkg is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="充值套餐不存在")

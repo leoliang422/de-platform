@@ -14,6 +14,12 @@ from app.modules.access.models import (
 )
 from app.modules.access.schemas import ModuleAccessOut
 from app.modules.points.service import PointsService
+from app.modules.settings.service import (
+    KEY_FREE_QUOTA,
+    KEY_INTERVIEW_UNLOCK,
+    KEY_SQL_UNLOCK,
+    get_int_setting,
+)
 from app.modules.users.models import User
 
 
@@ -44,16 +50,21 @@ class AccessService:
         self.db = db
         self.settings = get_settings()
 
-    def unlock_points(self, module: str) -> int:
+    async def unlock_points(self, module: str) -> int:
+        """模块一次性解锁积分：优先取后台配置，回退环境变量默认值。"""
         if module == "sql":
-            return self.settings.sql_module_unlock_points
+            return await get_int_setting(
+                self.db, KEY_SQL_UNLOCK, self.settings.sql_module_unlock_points
+            )
         if module == "interview":
-            return self.settings.interview_module_unlock_points
+            return await get_int_setting(
+                self.db, KEY_INTERVIEW_UNLOCK, self.settings.interview_module_unlock_points
+            )
         return 0
 
-    @property
-    def free_limit(self) -> int:
-        return self.settings.free_module_quota
+    async def free_limit(self) -> int:
+        """每模块免费查看条数：优先取后台配置，回退环境变量默认值。"""
+        return await get_int_setting(self.db, KEY_FREE_QUOTA, self.settings.free_module_quota)
 
     async def _module_unlocked(self, user_id: int, module: str) -> bool:
         stmt = select(ModuleAccessLog.id).where(
@@ -104,7 +115,8 @@ class AccessService:
         _validate_module(module)
         unlocked = await self._module_unlocked(user.id, module)
         used = await self._free_used(user.id, module)
-        price = self.unlock_points(module)
+        price = await self.unlock_points(module)
+        limit = await self.free_limit()
 
         if (
             self._is_privileged(user, author_id)
@@ -116,11 +128,11 @@ class AccessService:
                 consumed=False,
                 module_unlocked=unlocked,
                 free_used=used,
-                free_limit=self.free_limit,
+                free_limit=limit,
                 unlock_points=price,
             )
 
-        if used < self.free_limit:
+        if used < limit:
             self.db.add(ModuleAccessLog(user_id=user.id, module=module, item_id=item_id))
             await self.db.commit()
             return RevealState(
@@ -128,7 +140,7 @@ class AccessService:
                 consumed=True,
                 module_unlocked=False,
                 free_used=used + 1,
-                free_limit=self.free_limit,
+                free_limit=limit,
                 unlock_points=price,
             )
 
@@ -137,19 +149,20 @@ class AccessService:
             consumed=False,
             module_unlocked=False,
             free_used=used,
-            free_limit=self.free_limit,
+            free_limit=limit,
             unlock_points=price,
         )
 
     async def summary(self, user: User | None, module: str) -> ModuleAccessOut:
         _validate_module(module)
-        price = self.unlock_points(module)
+        price = await self.unlock_points(module)
+        limit = await self.free_limit()
         if user is None:
             return ModuleAccessOut(
                 module=module,
                 unlocked=False,
                 free_used=0,
-                free_limit=self.free_limit,
+                free_limit=limit,
                 unlock_points=price,
             )
         # 管理员不受免费额度限制，视为已解锁（无限查看）。
@@ -158,14 +171,14 @@ class AccessService:
                 module=module,
                 unlocked=True,
                 free_used=0,
-                free_limit=self.free_limit,
+                free_limit=limit,
                 unlock_points=price,
             )
         return ModuleAccessOut(
             module=module,
             unlocked=await self._module_unlocked(user.id, module),
             free_used=await self._free_used(user.id, module),
-            free_limit=self.free_limit,
+            free_limit=limit,
             unlock_points=price,
         )
 
@@ -174,7 +187,7 @@ class AccessService:
         if await self._module_unlocked(user.id, module):
             return ModuleUnlockOutcome(already=True)
 
-        price = self.unlock_points(module)
+        price = await self.unlock_points(module)
         if user.points_balance < price:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="积分不足")
 
