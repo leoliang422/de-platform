@@ -57,3 +57,7 @@ class AnnotationCreate(BaseModel):
     parent_id: int | None = None
     quote: str = Field(default="", max_length=2000)
     anchor_offset: int = Field(default=0, ge=0)
+
+
+class AnnotationUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)

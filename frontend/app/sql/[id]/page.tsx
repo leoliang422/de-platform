@@ -104,55 +104,62 @@ export default function SqlDetailPage({
             </div>
           </header>
 
-          {/* 一、题目描述（含示例表与数据）——正文已含「## 一、题目描述」标题 */}
-          <Prose>{item.prompt_md}</Prose>
+          {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0">
+              {/* 一、题目描述（含示例表与数据）——正文已含「## 一、题目描述」标题 */}
+              <Prose>{item.prompt_md}</Prose>
 
-          {/* 二、三：求解思路 / 求解 SQL —— 门控展示 */}
-          <div className="my-5">
-            {!user && item.answer_locked ? (
-              <p className="text-sm text-slate-500">
-                <Link href="/login" className="text-brand-600 hover:underline">
-                  登录
-                </Link>
-                后可查看解答（每个模块免费查看 {item.free_limit} 条）。
-              </p>
-            ) : quotaExhausted ? null : (
-              <button
-                onClick={handleShowAnswer}
-                disabled={busy}
-                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                {answerReady
-                  ? showAnswer
-                    ? "收起解答"
-                    : "查看求解思路与 SQL"
-                  : item.module_unlocked
-                    ? "查看求解思路与 SQL"
-                    : `查看解答（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
-              </button>
-            )}
-            {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
+              {/* 二、三：求解思路 / 求解 SQL —— 门控展示 */}
+              <div className="my-5">
+                {!user && item.answer_locked ? (
+                  <p className="text-sm text-slate-500">
+                    <Link href="/login" className="text-brand-600 hover:underline">
+                      登录
+                    </Link>
+                    后可查看解答（每个模块免费查看 {item.free_limit} 条）。
+                  </p>
+                ) : quotaExhausted ? null : (
+                  <button
+                    onClick={handleShowAnswer}
+                    disabled={busy}
+                    className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {answerReady
+                      ? showAnswer
+                        ? "收起解答"
+                        : "查看求解思路与 SQL"
+                      : item.module_unlocked
+                        ? "查看求解思路与 SQL"
+                        : `查看解答（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
+                  </button>
+                )}
+                {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
+              </div>
+
+              {quotaExhausted && (
+                <ModuleUnlockPanel
+                  module="sql"
+                  freeUsed={item.free_used}
+                  freeLimit={item.free_limit}
+                  unlockPoints={item.unlock_points}
+                  onUnlocked={load}
+                />
+              )}
+
+              {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
+
+              {PLAYGROUND_FIXTURES[item.title] && (
+                <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
+              )}
+            </div>
+
+            <div className="lg:sticky lg:top-20 lg:self-start">
+              <PersonalNotes contentType="sql" contentId={item.id} />
+            </div>
           </div>
 
-          {quotaExhausted && (
-            <ModuleUnlockPanel
-              module="sql"
-              freeUsed={item.free_used}
-              freeLimit={item.free_limit}
-              unlockPoints={item.unlock_points}
-              onUnlocked={load}
-            />
-          )}
-
-          {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
-
-          {PLAYGROUND_FIXTURES[item.title] && (
-            <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
-          )}
-
           <ContentInteractions contentType="sql" contentId={item.id} />
-
-          <PersonalNotes contentType="sql" contentId={item.id} />
         </>
       )}
     </div>

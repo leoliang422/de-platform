@@ -9,6 +9,7 @@ import {
   createComment,
   deleteAnnotation,
   deleteComment,
+  updateAnnotation,
   getAnnotations,
   getComments,
   getInteractionStats,
@@ -387,6 +388,9 @@ export function PersonalNotes({
   const [notes, setNotes] = useState<AnnotationItem[]>([]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editBody, setEditBody] = useState("");
 
   const load = useCallback(() => {
     const token = getAccessToken();
@@ -405,12 +409,40 @@ export function PersonalNotes({
 
   async function save() {
     const token = getAccessToken();
-    if (!token || !body.trim()) return;
+    if (!token || !body.trim() || busy) return;
     setBusy(true);
+    setError(null);
     try {
-      await createAnnotation(token, contentType, contentId, body.trim());
+      const created = await createAnnotation(token, contentType, contentId, body.trim());
+      // 立即插入，保证"保存后马上可见"，再后台刷新对齐。
+      setNotes((prev) => [...prev, created]);
       setBody("");
       load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存失败，请重试");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEdit(n: AnnotationItem) {
+    setEditingId(n.id);
+    setEditBody(n.body);
+    setError(null);
+  }
+
+  async function saveEdit(id: number) {
+    const token = getAccessToken();
+    if (!token || !editBody.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await updateAnnotation(token, id, editBody.trim());
+      setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      setEditingId(null);
+      setEditBody("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "修改失败，请重试");
     } finally {
       setBusy(false);
     }
@@ -420,21 +452,34 @@ export function PersonalNotes({
     const token = getAccessToken();
     if (!token) return;
     if (!window.confirm("确认删除该笔记？")) return;
-    await deleteAnnotation(token, id);
-    load();
+    setError(null);
+    try {
+      await deleteAnnotation(token, id);
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败，请重试");
+    }
   }
 
   const tops = notes.filter((n) => n.parent_id == null);
 
   return (
-    <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="text-base font-semibold text-slate-900">我的笔记（仅自己可见）</h3>
-      <p className="mb-3 mt-0.5 text-xs text-slate-400">
-        记录你对本题的思路 / 易错点，只有你自己能看到，免审核、即时保存。
-      </p>
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="flex items-center gap-1 text-base font-semibold text-slate-900">
+        我的笔记
+        {/* 说明改为「带圈问号」悬停提示 */}
+        <span className="group relative inline-flex">
+          <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-normal text-slate-400">
+            ?
+          </span>
+          <span className="pointer-events-none absolute left-1/2 top-6 z-20 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+            仅自己可见、免审核、即时保存；可添加多条并随时修改。
+          </span>
+        </span>
+      </h3>
 
       {user ? (
-        <div className="mb-4">
+        <div className="mb-4 mt-3">
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -449,9 +494,10 @@ export function PersonalNotes({
           >
             {busy ? "保存中…" : "保存笔记"}
           </button>
+          {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         </div>
       ) : (
-        <p className="mb-4 text-sm text-slate-400">
+        <p className="mb-4 mt-3 text-sm text-slate-400">
           <Link href="/login" className="text-brand-600 hover:underline">
             登录
           </Link>
@@ -466,15 +512,54 @@ export function PersonalNotes({
           {tops.map((n) => (
             <li
               key={n.id}
-              className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
+              className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
             >
-              <span className="whitespace-pre-wrap break-words text-slate-700">{n.body}</span>
-              <button
-                onClick={() => remove(n.id)}
-                className="shrink-0 text-xs text-slate-400 hover:text-red-500"
-              >
-                删除
-              </button>
+              {editingId === n.id ? (
+                <div>
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => saveEdit(n.id)}
+                      disabled={busy || !editBody.trim()}
+                      className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditBody("");
+                      }}
+                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <span className="whitespace-pre-wrap break-words text-slate-700">{n.body}</span>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => startEdit(n)}
+                      className="text-xs text-slate-400 hover:text-brand-600"
+                    >
+                      修改
+                    </button>
+                    <button
+                      onClick={() => remove(n.id)}
+                      className="text-xs text-slate-400 hover:text-red-500"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              )}
             </li>
           ))}
         </ul>

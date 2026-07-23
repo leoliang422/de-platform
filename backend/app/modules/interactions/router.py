@@ -6,6 +6,7 @@ from app.core.deps import get_current_user, get_current_user_optional
 from app.modules.interactions.schemas import (
     AnnotationCreate,
     AnnotationOut,
+    AnnotationUpdate,
     CommentCreate,
     CommentOut,
     FavoriteItem,
@@ -153,6 +154,29 @@ async def create_annotation(
         user_id=annotation.user_id,
         author_nickname=current_user.nickname,
         author_avatar=current_user.avatar_url,
+        parent_id=annotation.parent_id,
+        quote=annotation.quote or "",
+        anchor_offset=annotation.anchor_offset or 0,
+        body=annotation.body,
+        created_at=annotation.created_at,
+    )
+
+
+@router.patch("/annotations/{annotation_id}", response_model=AnnotationOut)
+async def update_annotation(
+    annotation_id: int,
+    data: AnnotationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AnnotationOut:
+    annotation, author = await InteractionService(db).update_annotation(
+        current_user, annotation_id, data.body
+    )
+    return AnnotationOut(
+        id=annotation.id,
+        user_id=annotation.user_id,
+        author_nickname=author.nickname,
+        author_avatar=author.avatar_url,
         parent_id=annotation.parent_id,
         quote=annotation.quote or "",
         anchor_offset=annotation.anchor_offset or 0,

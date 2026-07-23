@@ -266,6 +266,17 @@ export function createAnnotation(
   });
 }
 
+export function updateAnnotation(
+  token: string,
+  annotationId: number,
+  body: string,
+): Promise<AnnotationItem> {
+  return authRequest<AnnotationItem>(`/interactions/annotations/${annotationId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ body }),
+  });
+}
+
 export function deleteAnnotation(token: string, annotationId: number): Promise<void> {
   return authRequest<void>(`/interactions/annotations/${annotationId}`, token, {
     method: "DELETE",
