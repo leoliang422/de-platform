@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
-import { AnnotatedReader, ContentInteractions } from "@/components/interactions";
+import { ContentInteractions, PersonalNotes } from "@/components/interactions";
 import { SqlPlayground } from "@/components/sql-playground";
 import { ModuleUnlockPanel } from "@/components/unlock";
 import { PLAYGROUND_FIXTURES } from "@/lib/sql-playground";
@@ -76,7 +76,7 @@ export default function SqlDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <AnnotatedReader contentType="sql" contentId={item.id}>
+        <>
           {/* 标题区 */}
           <header className="mb-6 border-b border-slate-200 pb-4">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">{item.title}</h1>
@@ -151,7 +151,9 @@ export default function SqlDetailPage({
           )}
 
           <ContentInteractions contentType="sql" contentId={item.id} />
-        </AnnotatedReader>
+
+          <PersonalNotes contentType="sql" contentId={item.id} />
+        </>
       )}
     </div>
   );
