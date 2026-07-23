@@ -19,16 +19,34 @@ const EMOJIS = [
 export function MessageBubbles({
   messages,
   selfIsAdmin,
+  onDelete,
+  deletableAll = false,
 }: {
   messages: ContactMessage[];
   selfIsAdmin: boolean;
+  /** 传入后消息可删除/撤回；默认仅「我方」消息可删，`deletableAll` 时全部可删（管理员）。 */
+  onDelete?: (m: ContactMessage) => void;
+  deletableAll?: boolean;
 }) {
   return (
     <>
       {messages.map((m) => {
         const mine = m.from_admin === selfIsAdmin;
+        const deletable = !!onDelete && (deletableAll || mine);
         return (
-          <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+          <div
+            key={m.id}
+            className={`group flex items-center gap-1.5 ${mine ? "justify-end" : "justify-start"}`}
+          >
+            {deletable && mine && (
+              <button
+                onClick={() => onDelete?.(m)}
+                title={mine ? "撤回" : "删除"}
+                className="shrink-0 rounded px-1 text-xs text-slate-300 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+              >
+                ✕
+              </button>
+            )}
             <div className="max-w-[78%]">
               <div
                 className={`overflow-hidden rounded-2xl text-sm ${
@@ -67,6 +85,15 @@ export function MessageBubbles({
                 {new Date(m.created_at).toLocaleString("zh-CN")}
               </div>
             </div>
+            {deletable && !mine && (
+              <button
+                onClick={() => onDelete?.(m)}
+                title="删除"
+                className="shrink-0 rounded px-1 text-xs text-slate-300 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+              >
+                ✕
+              </button>
+            )}
           </div>
         );
       })}

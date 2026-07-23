@@ -8,6 +8,7 @@ import { RequireAuth } from "@/components/guard";
 import {
   type ContactMessage,
   type SendMessagePayload,
+  deleteMyMessage,
   getAccessToken,
   getMyMessages,
   sendMessageToAdmin,
@@ -52,6 +53,18 @@ function ContactInner() {
     setMessages((prev) => [...prev, msg]);
   }
 
+  async function handleDelete(m: ContactMessage) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("撤回这条消息？")) return;
+    setMessages((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      await deleteMyMessage(token, m.id);
+    } catch {
+      load();
+    }
+  }
+
   return (
     <div>
       <PageHeader title="联系管理员" desc="有任何问题、建议或反馈，都可以在这里私信管理员" />
@@ -65,7 +78,7 @@ function ContactInner() {
               还没有消息，发一条试试吧～管理员会尽快回复你。
             </p>
           ) : (
-            <MessageBubbles messages={messages} selfIsAdmin={false} />
+            <MessageBubbles messages={messages} selfIsAdmin={false} onDelete={handleDelete} />
           )}
           <div ref={bottomRef} />
         </div>

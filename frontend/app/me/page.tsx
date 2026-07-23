@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
 import { useAuth } from "@/lib/auth";
 import {
+  clearLedger,
+  deleteLedgerEntry,
   getAccessToken,
   getMyEntitlements,
   getMyPoints,
@@ -47,6 +49,31 @@ function MeInner() {
       .then(setEntitlements)
       .catch(() => setEntitlements([]));
   }, []);
+
+  async function handleDeleteEntry(id: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    setPoints((prev) =>
+      prev ? { ...prev, ledger: prev.ledger.filter((e) => e.id !== id) } : prev,
+    );
+    try {
+      await deleteLedgerEntry(token, id);
+    } catch {
+      getMyPoints(token).then(setPoints).catch(() => {});
+    }
+  }
+
+  async function handleClearLedger() {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("确定清空全部积分明细？仅清空历史记录，不影响当前积分余额。")) return;
+    setPoints((prev) => (prev ? { ...prev, ledger: [] } : prev));
+    try {
+      await clearLedger(token);
+    } catch {
+      getMyPoints(token).then(setPoints).catch(() => {});
+    }
+  }
 
   return (
     <div>
@@ -104,7 +131,14 @@ function MeInner() {
         </Link>
       </div>
 
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">积分明细</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">积分明细</h2>
+        {points && points.ledger.length > 0 && (
+          <button onClick={handleClearLedger} className="text-sm text-red-500 hover:underline">
+            清空
+          </button>
+        )}
+      </div>
       {!points ? (
         <p className="text-sm text-slate-400">加载中…</p>
       ) : points.ledger.length === 0 ? (
@@ -114,12 +148,25 @@ function MeInner() {
           {points.ledger.map((e) => (
             <div
               key={e.id}
-              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm"
+              className="group flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm"
             >
               <span className="text-slate-700">{e.reason}</span>
-              <span className={e.delta >= 0 ? "font-medium text-green-600" : "font-medium text-red-600"}>
-                {e.delta >= 0 ? `+${e.delta}` : e.delta}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className={
+                    e.delta >= 0 ? "font-medium text-green-600" : "font-medium text-red-600"
+                  }
+                >
+                  {e.delta >= 0 ? `+${e.delta}` : e.delta}
+                </span>
+                <button
+                  onClick={() => handleDeleteEntry(e.id)}
+                  title="删除"
+                  className="rounded px-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           ))}
         </div>

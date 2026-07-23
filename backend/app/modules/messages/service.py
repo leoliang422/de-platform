@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import func, select, update
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.messages.models import ContactMessage
+from app.modules.messages.models import ContactMessage, ConversationState
 from app.modules.messages.schemas import ConversationOut, SendMessageIn
 from app.modules.notifications.service import NotificationService
 from app.modules.users.models import User
@@ -51,6 +52,11 @@ class ContactMessageService:
         return int(count or 0)
 
     async def send_from_user(self, user_id: int, data: SendMessageIn) -> ContactMessage:
+        state = await self.db.get(ConversationState, user_id)
+        if state is not None and state.blocked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="你已被管理员屏蔽，暂时无法发送私信"
+            )
         msg = ContactMessage(
             user_id=user_id,
             from_admin=False,
@@ -65,6 +71,18 @@ class ContactMessageService:
         await self.db.refresh(msg)
         return msg
 
+    async def delete_message(
+        self, message_id: int, *, requester_id: int, is_admin: bool
+    ) -> None:
+        """删除单条私信。管理员可删会话内任意消息；普通用户仅能撤回自己发出的消息。"""
+        msg = await self.db.get(ContactMessage, message_id)
+        if msg is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="消息不存在")
+        if not is_admin and (msg.user_id != requester_id or msg.from_admin):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除该消息")
+        await self.db.delete(msg)
+        await self.db.commit()
+
     # ---- 管理员侧 ----
     async def list_conversations(self) -> list[ConversationOut]:
         # 取每个会话的最后一条消息时间与未读数，联表用户信息。
@@ -74,8 +92,6 @@ class ContactMessageService:
             )
         )
         msgs = list(result.scalars().all())
-        if not msgs:
-            return []
 
         last_by_user: dict[int, ContactMessage] = {}
         unread_by_user: dict[int, int] = {}
@@ -85,26 +101,78 @@ class ContactMessageService:
             if not m.from_admin and m.read_at is None:
                 unread_by_user[m.user_id] = unread_by_user.get(m.user_id, 0) + 1
 
+        # 会话状态（置顶/屏蔽）：即使会话被清空、无消息，只要有状态也应保留在列表里。
+        states = {
+            s.user_id: s
+            for s in (await self.db.execute(select(ConversationState))).scalars().all()
+        }
+        user_ids = set(last_by_user) | set(states)
+        if not user_ids:
+            return []
+
         users = {
             u.id: u
-            for u in (await self.db.execute(select(User).where(User.id.in_(last_by_user.keys()))))
+            for u in (await self.db.execute(select(User).where(User.id.in_(user_ids))))
             .scalars()
             .all()
         }
         out: list[ConversationOut] = []
-        for user_id, last in last_by_user.items():
-            user = users.get(user_id)
+        for uid in user_ids:
+            user = users.get(uid)
+            last = last_by_user.get(uid)
+            state = states.get(uid)
             out.append(
                 ConversationOut(
-                    user_id=user_id,
-                    nickname=user.nickname if user else f"用户#{user_id}",
+                    user_id=uid,
+                    nickname=user.nickname if user else f"用户#{uid}",
                     avatar_url=user.avatar_url if user else None,
-                    last_body=_preview(last),
-                    last_at=last.created_at,
-                    unread=unread_by_user.get(user_id, 0),
+                    last_body=_preview(last) if last else "",
+                    last_at=last.created_at if last else (state.created_at if state else None),
+                    unread=unread_by_user.get(uid, 0),
+                    pinned=bool(state and state.pinned),
+                    blocked=bool(state and state.blocked),
                 )
             )
+        # 置顶优先，再按最后活跃时间倒序。
+        _epoch = dt.datetime.min.replace(tzinfo=dt.UTC)
+        out.sort(key=lambda c: (c.pinned, c.last_at or _epoch), reverse=True)
         return out
+
+    async def _get_or_create_state(self, user_id: int) -> ConversationState:
+        state = await self.db.get(ConversationState, user_id)
+        if state is None:
+            state = ConversationState(user_id=user_id)
+            self.db.add(state)
+        return state
+
+    async def set_state(
+        self, user_id: int, *, pinned: bool | None = None, blocked: bool | None = None
+    ) -> ConversationState:
+        state = await self._get_or_create_state(user_id)
+        if pinned is not None:
+            state.pinned = pinned
+        if blocked is not None:
+            state.blocked = blocked
+        await self.db.commit()
+        await self.db.refresh(state)
+        return state
+
+    async def clear_conversation(self, user_id: int) -> None:
+        """清空聊天：删除该会话全部消息，但保留会话（置顶/屏蔽状态不变）。"""
+        await self.db.execute(
+            delete(ContactMessage).where(ContactMessage.user_id == user_id)
+        )
+        await self.db.commit()
+
+    async def delete_conversation(self, user_id: int) -> None:
+        """删除聊天：删除全部消息并移除会话状态，会话从列表消失。"""
+        await self.db.execute(
+            delete(ContactMessage).where(ContactMessage.user_id == user_id)
+        )
+        await self.db.execute(
+            delete(ConversationState).where(ConversationState.user_id == user_id)
+        )
+        await self.db.commit()
 
     async def admin_unread_total(self) -> int:
         count = await self.db.scalar(

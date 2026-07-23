@@ -26,7 +26,11 @@ import {
   type AdminUser,
   type AdminUserAccess,
   type ContactMessage,
+  adminClearConversation,
+  adminDeleteConversation,
+  adminDeleteMessage,
   adminGetPointsConfig,
+  adminSetConversationState,
   adminSetPointsConfig,
   getAccessToken,
   getAdminConversation,
@@ -642,6 +646,69 @@ function AdminMessages({ onChange }: { onChange?: () => void }) {
     onChange?.();
   }
 
+  async function handleDeleteMsg(m: ContactMessage) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("删除这条消息？")) return;
+    setMsgs((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      await adminDeleteMessage(token, m.id);
+      loadConvs();
+    } catch {
+      if (activeUser != null) getAdminConversation(token, activeUser).then(setMsgs).catch(() => {});
+    }
+  }
+
+  async function handleToggleState(
+    userId: number,
+    patch: { pinned?: boolean; blocked?: boolean },
+  ) {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      const res = await adminSetConversationState(token, userId, patch);
+      setConvs((prev) =>
+        prev.map((c) =>
+          c.user_id === userId ? { ...c, pinned: res.pinned, blocked: res.blocked } : c,
+        ),
+      );
+      loadConvs();
+    } catch {
+      loadConvs();
+    }
+  }
+
+  async function handleClearConv(userId: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("清空该会话的全部聊天记录？会话保留，记录不可恢复。")) return;
+    try {
+      await adminClearConversation(token, userId);
+      if (activeUser === userId) setMsgs([]);
+      loadConvs();
+      onChange?.();
+    } catch {
+      loadConvs();
+    }
+  }
+
+  async function handleDeleteConv(userId: number) {
+    const token = getAccessToken();
+    if (!token) return;
+    if (!window.confirm("删除整个会话？聊天记录与会话都会被移除，不可恢复。")) return;
+    try {
+      await adminDeleteConversation(token, userId);
+      if (activeUser === userId) {
+        setActiveUser(null);
+        setMsgs([]);
+      }
+      loadConvs();
+      onChange?.();
+    } catch {
+      loadConvs();
+    }
+  }
+
   const activeConv = convs.find((c) => c.user_id === activeUser);
 
   return (
@@ -654,27 +721,65 @@ function AdminMessages({ onChange }: { onChange?: () => void }) {
             <p className="p-4 text-sm text-slate-400">暂无用户私信。</p>
           ) : (
             convs.map((c) => (
-              <button
+              <div
                 key={c.user_id}
-                onClick={() => openConv(c.user_id)}
-                className={`flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left transition hover:bg-slate-50 ${
+                className={`group border-b border-slate-100 transition hover:bg-slate-50 ${
                   activeUser === c.user_id ? "bg-brand-50" : ""
                 }`}
               >
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <span className="truncate text-sm font-medium text-slate-800">
-                      {c.nickname}
-                    </span>
-                    {c.unread > 0 && (
-                      <span className="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                        {c.unread}
+                <button
+                  onClick={() => openConv(c.user_id)}
+                  className="flex w-full items-center gap-2 px-3 pt-2.5 text-left"
+                >
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="flex min-w-0 items-center gap-1">
+                        {c.pinned && <span className="text-xs">📌</span>}
+                        <span className="truncate text-sm font-medium text-slate-800">
+                          {c.nickname}
+                        </span>
+                        {c.blocked && (
+                          <span className="rounded bg-slate-200 px-1 text-[10px] text-slate-500">
+                            已屏蔽
+                          </span>
+                        )}
                       </span>
-                    )}
+                      {c.unread > 0 && (
+                        <span className="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                          {c.unread}
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-slate-400">{c.last_body || "（暂无消息）"}</p>
                   </div>
-                  <p className="truncate text-xs text-slate-400">{c.last_body}</p>
+                </button>
+                <div className="flex flex-wrap gap-2 px-3 pb-2 pt-1 text-[11px] text-slate-400 opacity-0 transition group-hover:opacity-100">
+                  <button
+                    onClick={() => handleToggleState(c.user_id, { pinned: !c.pinned })}
+                    className="hover:text-brand-600"
+                  >
+                    {c.pinned ? "取消置顶" : "置顶"}
+                  </button>
+                  <button
+                    onClick={() => handleToggleState(c.user_id, { blocked: !c.blocked })}
+                    className="hover:text-amber-600"
+                  >
+                    {c.blocked ? "解除屏蔽" : "屏蔽"}
+                  </button>
+                  <button
+                    onClick={() => handleClearConv(c.user_id)}
+                    className="hover:text-red-500"
+                  >
+                    清空
+                  </button>
+                  <button
+                    onClick={() => handleDeleteConv(c.user_id)}
+                    className="hover:text-red-600"
+                  >
+                    删除
+                  </button>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -687,11 +792,47 @@ function AdminMessages({ onChange }: { onChange?: () => void }) {
             </div>
           ) : (
             <>
-              <div className="border-b border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
-                {activeConv?.nickname ?? `用户 #${activeUser}`}
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
+                <span className="flex items-center gap-1 text-sm font-medium text-slate-700">
+                  {activeConv?.pinned && <span>📌</span>}
+                  {activeConv?.nickname ?? `用户 #${activeUser}`}
+                  {activeConv?.blocked && (
+                    <span className="rounded bg-slate-200 px-1 text-[10px] text-slate-500">
+                      已屏蔽
+                    </span>
+                  )}
+                </span>
+                <div className="flex gap-3 text-xs text-slate-400">
+                  <button
+                    onClick={() => handleToggleState(activeUser, { pinned: !activeConv?.pinned })}
+                    className="hover:text-brand-600"
+                  >
+                    {activeConv?.pinned ? "取消置顶" : "置顶"}
+                  </button>
+                  <button
+                    onClick={() => handleToggleState(activeUser, { blocked: !activeConv?.blocked })}
+                    className="hover:text-amber-600"
+                  >
+                    {activeConv?.blocked ? "解除屏蔽" : "屏蔽"}
+                  </button>
+                  <button onClick={() => handleClearConv(activeUser)} className="hover:text-red-500">
+                    清空聊天
+                  </button>
+                  <button
+                    onClick={() => handleDeleteConv(activeUser)}
+                    className="hover:text-red-600"
+                  >
+                    删除聊天
+                  </button>
+                </div>
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                <MessageBubbles messages={msgs} selfIsAdmin />
+                <MessageBubbles
+                  messages={msgs}
+                  selfIsAdmin
+                  onDelete={handleDeleteMsg}
+                  deletableAll
+                />
                 <div ref={bottomRef} />
               </div>
               <ChatComposer onSend={handleReply} placeholder="回复用户…（⌘/Ctrl + Enter 发送）" />

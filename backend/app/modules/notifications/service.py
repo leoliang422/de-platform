@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import HTTPException, status
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.models import Notification
@@ -56,4 +56,17 @@ class NotificationService:
             .values(read_at=dt.datetime.now(dt.UTC))
         )
         await self.db.execute(stmt)
+        await self.db.commit()
+
+    async def delete(self, user_id: int, notification_id: int) -> None:
+        """永久删除一条通知（仅限本人）。"""
+        notification = await self.repo.get(notification_id)
+        if notification is None or notification.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="通知不存在")
+        await self.db.delete(notification)
+        await self.db.commit()
+
+    async def clear(self, user_id: int) -> None:
+        """清空本人全部通知。"""
+        await self.db.execute(delete(Notification).where(Notification.user_id == user_id))
         await self.db.commit()

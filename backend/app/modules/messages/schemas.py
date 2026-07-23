@@ -41,5 +41,19 @@ class ConversationOut(BaseModel):
     nickname: str
     avatar_url: str | None = None
     last_body: str
-    last_at: dt.datetime
+    last_at: dt.datetime | None = None
     unread: int
+    pinned: bool = False
+    blocked: bool = False
+
+
+class ConversationStateIn(BaseModel):
+    """管理员更新会话状态（置顶 / 屏蔽），只传需要改的字段。"""
+
+    pinned: bool | None = None
+    blocked: bool | None = None
+
+
+class ConversationStateOut(BaseModel):
+    pinned: bool
+    blocked: bool

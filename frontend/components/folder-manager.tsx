@@ -661,7 +661,7 @@ export function FolderManager() {
     dialog?.mode === "edit" ? "编辑内容" : `添加${SECTION_TABS.find((t) => t.value === section)?.label}`;
 
   return (
-    <div className="mt-10">
+    <div>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">目录管理</h2>
         <div className="flex gap-2">

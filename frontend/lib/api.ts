@@ -316,8 +316,10 @@ export interface AdminConversation {
   nickname: string;
   avatar_url: string | null;
   last_body: string;
-  last_at: string;
+  last_at: string | null;
   unread: number;
+  pinned: boolean;
+  blocked: boolean;
 }
 
 export function getMyMessages(token: string): Promise<ContactMessage[]> {
@@ -367,6 +369,43 @@ export function markNotificationRead(token: string, id: number): Promise<Notific
 
 export function markAllNotificationsRead(token: string): Promise<{ unread: number }> {
   return authRequest<{ unread: number }>("/notifications/read-all", token, { method: "POST" });
+}
+
+export function deleteNotification(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/notifications/${id}`, token, { method: "DELETE" });
+}
+
+export function clearNotifications(token: string): Promise<void> {
+  return authRequest<void>("/notifications", token, { method: "DELETE" });
+}
+
+// ---- 撤回 / 删除私信、会话管理（用户 & 管理员） ----
+export function deleteMyMessage(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/messages/${id}`, token, { method: "DELETE" });
+}
+
+export function adminDeleteMessage(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/admin/messages/message/${id}`, token, { method: "DELETE" });
+}
+
+export function adminSetConversationState(
+  token: string,
+  userId: number,
+  payload: { pinned?: boolean; blocked?: boolean },
+): Promise<{ pinned: boolean; blocked: boolean }> {
+  return authRequest<{ pinned: boolean; blocked: boolean }>(
+    `/admin/messages/${userId}/state`,
+    token,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function adminClearConversation(token: string, userId: number): Promise<void> {
+  return authRequest<void>(`/admin/messages/${userId}/clear`, token, { method: "DELETE" });
+}
+
+export function adminDeleteConversation(token: string, userId: number): Promise<void> {
+  return authRequest<void>(`/admin/messages/${userId}`, token, { method: "DELETE" });
 }
 
 export async function uploadImage(token: string, file: File): Promise<{ url: string }> {
@@ -953,6 +992,14 @@ export interface PointsOverview {
 
 export function getMyPoints(token: string): Promise<PointsOverview> {
   return authRequest<PointsOverview>("/points/me", token);
+}
+
+export function deleteLedgerEntry(token: string, id: number): Promise<void> {
+  return authRequest<void>(`/points/ledger/${id}`, token, { method: "DELETE" });
+}
+
+export function clearLedger(token: string): Promise<void> {
+  return authRequest<void>("/points/ledger", token, { method: "DELETE" });
 }
 
 // ---- Admin ----

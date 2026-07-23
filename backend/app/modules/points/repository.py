@@ -28,3 +28,6 @@ class PointsRepository:
 
     def add(self, entry: PointLedger) -> None:
         self.db.add(entry)
+
+    async def get(self, entry_id: int) -> PointLedger | None:
+        return await self.db.get(PointLedger, entry_id)

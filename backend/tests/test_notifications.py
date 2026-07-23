@@ -116,3 +116,29 @@ async def test_cannot_read_others_notification(client: AsyncClient, db: AsyncSes
     intruder = await _register_and_login(client, "intruder2@test.io")
     resp = await client.post(f"/notifications/{nid}/read", headers=_auth(intruder))
     assert resp.status_code == 404
+
+
+async def test_delete_and_clear_notifications(client: AsyncClient, db: AsyncSession) -> None:
+    author = await _register_and_login(client, "ndel@test.io")
+    admin = await _register_and_login(client, "ndeladmin@test.io")
+    await _make_admin(db, "ndeladmin@test.io")
+    for title in ("n1", "n2"):
+        sid = await _submit(client, db, author, title)
+        await client.post(f"/admin/submissions/{sid}/approve", headers=_auth(admin))
+
+    notifs = (await client.get("/notifications", headers=_auth(author))).json()
+    assert len(notifs) == 2
+
+    # 删除一条（他人无权删）
+    intruder = await _register_and_login(client, "nintruder@test.io")
+    assert (
+        await client.delete(f"/notifications/{notifs[0]['id']}", headers=_auth(intruder))
+    ).status_code == 404
+    assert (
+        await client.delete(f"/notifications/{notifs[0]['id']}", headers=_auth(author))
+    ).status_code == 204
+    assert len((await client.get("/notifications", headers=_auth(author))).json()) == 1
+
+    # 清空全部
+    assert (await client.delete("/notifications", headers=_auth(author))).status_code == 204
+    assert (await client.get("/notifications", headers=_auth(author))).json() == []
