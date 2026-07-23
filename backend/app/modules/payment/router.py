@@ -105,7 +105,7 @@ async def create_recharge(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RechargeOrderOut:
-    order = await RechargeService(db).create(current_user.id, data.package_id)
+    order = await RechargeService(db).create(current_user.id, data.package_id, data.note)
     return RechargeOrderOut.model_validate(order)
 
 

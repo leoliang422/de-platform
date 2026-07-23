@@ -69,6 +69,7 @@ class AdminRechargeOrderOut(BaseModel):
     user_email: str
     amount_cash: float
     points_delta: int | None = None
+    note: str | None = None
     status: str
     created_at: dt.datetime
 
