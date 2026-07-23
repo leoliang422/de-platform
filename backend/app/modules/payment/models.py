@@ -32,6 +32,8 @@ class Order(Base):
     amount_cash: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     # 充值订单（item_type="recharge"）确认到账后应发放的积分数；内容解锁订单为空。
     points_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 用户充值时填写的转账备注（如付款账号/昵称），便于管理员核对到账。
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     provider: Mapped[str] = mapped_column(String(20), default="mock", nullable=False)
     provider_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -340,6 +340,7 @@ async def _recharge_out(db: AsyncSession, orders: list) -> list[AdminRechargeOrd
                 user_email=u.email if u else "",
                 amount_cash=float(o.amount_cash),
                 points_delta=o.points_delta,
+                note=o.note,
                 status=o.status,
                 created_at=o.created_at,
             )

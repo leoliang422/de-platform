@@ -1203,6 +1203,7 @@ export interface RechargeOrder {
   id: number;
   amount_cash: number;
   points_delta: number | null;
+  note: string | null;
   status: string; // pending | paid | failed
   created_at: string;
 }
@@ -1217,10 +1218,14 @@ export function getRechargeConfig(): Promise<RechargeConfig> {
   return request<RechargeConfig>("/payment/recharge/config");
 }
 
-export function createRechargeOrder(token: string, packageId: number): Promise<RechargeOrder> {
+export function createRechargeOrder(
+  token: string,
+  packageId: number,
+  note?: string,
+): Promise<RechargeOrder> {
   return authRequest<RechargeOrder>("/payment/recharge", token, {
     method: "POST",
-    body: JSON.stringify({ package_id: packageId }),
+    body: JSON.stringify({ package_id: packageId, note: note ?? null }),
   });
 }
 
