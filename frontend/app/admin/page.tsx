@@ -48,7 +48,58 @@ export default function AdminPage() {
   );
 }
 
+type AdminTab = "review" | "recharge" | "folder" | "users" | "messages";
+
+const ADMIN_NAV: { id: AdminTab; label: string }[] = [
+  { id: "review", label: "八股审核" },
+  { id: "recharge", label: "充值管理" },
+  { id: "folder", label: "目录管理" },
+  { id: "users", label: "用户管理" },
+  { id: "messages", label: "用户私信" },
+];
+
 function AdminInner() {
+  const [active, setActive] = useState<AdminTab>("review");
+
+  return (
+    <div>
+      <PageHeader title="管理后台" desc="审核投稿、管理内容、维护分类" />
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_180px]">
+        <section>
+          {active === "review" && <SubmissionQueue />}
+          {active === "recharge" && <RechargeReview />}
+          {active === "folder" && <FolderManager />}
+          {active === "users" && <UserManager />}
+          {active === "messages" && <AdminMessages />}
+        </section>
+
+        <aside className="order-first text-sm md:order-last md:sticky md:top-20 md:self-start">
+          <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            管理导航
+          </p>
+          <div className="flex flex-wrap gap-2 md:flex-col md:gap-0.5">
+            {ADMIN_NAV.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => setActive(n.id)}
+                className={`rounded px-3 py-1.5 text-left ${
+                  active === n.id
+                    ? "bg-brand-50 font-medium text-brand-700"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {n.label}
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function SubmissionQueue() {
   const [subs, setSubs] = useState<AdminSubmission[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,8 +133,6 @@ function AdminInner() {
 
   return (
     <div>
-      <PageHeader title="管理后台" desc="审核投稿、管理内容、维护分类" />
-
       <h2 className="mb-3 text-lg font-semibold text-slate-900">审核队列</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {subs.length === 0 ? (
@@ -95,14 +144,6 @@ function AdminInner() {
           ))}
         </div>
       )}
-
-      <RechargeReview />
-
-      <FolderManager />
-
-      <UserManager />
-
-      <AdminMessages />
     </div>
   );
 }
