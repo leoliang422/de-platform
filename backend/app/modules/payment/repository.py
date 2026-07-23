@@ -24,6 +24,23 @@ class PaymentRepository:
     async def get_order(self, order_id: int) -> Order | None:
         return await self.db.get(Order, order_id)
 
+    async def list_recharge_orders_by_user(self, user_id: int) -> list[Order]:
+        stmt = (
+            select(Order)
+            .where(Order.user_id == user_id, Order.item_type == "recharge")
+            .order_by(Order.id.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_recharge_orders_by_status(self, status_value: str | None) -> list[Order]:
+        stmt = select(Order).where(Order.item_type == "recharge")
+        if status_value:
+            stmt = stmt.where(Order.status == status_value)
+        stmt = stmt.order_by(Order.id.desc())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_entitlements(self, user_id: int) -> list[Entitlement]:
         stmt = (
             select(Entitlement)

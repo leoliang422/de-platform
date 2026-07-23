@@ -1187,6 +1187,77 @@ export function getMyEntitlements(token: string): Promise<Entitlement[]> {
   return authRequest<Entitlement[]>("/payment/entitlements/me", token);
 }
 
+// ---- 积分充值（人工确认）----
+export interface RechargePackage {
+  id: number;
+  amount: number; // 人民币元
+  points: number; // 到账积分
+}
+
+export interface RechargeConfig {
+  qr_url: string;
+  packages: RechargePackage[];
+}
+
+export interface RechargeOrder {
+  id: number;
+  amount_cash: number;
+  points_delta: number | null;
+  status: string; // pending | paid | failed
+  created_at: string;
+}
+
+export interface AdminRechargeOrder extends RechargeOrder {
+  user_id: number;
+  user_nickname: string;
+  user_email: string;
+}
+
+export function getRechargeConfig(): Promise<RechargeConfig> {
+  return request<RechargeConfig>("/payment/recharge/config");
+}
+
+export function createRechargeOrder(token: string, packageId: number): Promise<RechargeOrder> {
+  return authRequest<RechargeOrder>("/payment/recharge", token, {
+    method: "POST",
+    body: JSON.stringify({ package_id: packageId }),
+  });
+}
+
+export function getMyRechargeOrders(token: string): Promise<RechargeOrder[]> {
+  return authRequest<RechargeOrder[]>("/payment/recharge/me", token);
+}
+
+export function adminListRechargeOrders(
+  token: string,
+  status = "pending",
+): Promise<AdminRechargeOrder[]> {
+  return authRequest<AdminRechargeOrder[]>(`/admin/recharge-orders?status=${status}`, token);
+}
+
+export function adminConfirmRecharge(token: string, orderId: number): Promise<AdminRechargeOrder> {
+  return authRequest<AdminRechargeOrder>(`/admin/recharge-orders/${orderId}/confirm`, token, {
+    method: "POST",
+  });
+}
+
+export function adminRejectRecharge(token: string, orderId: number): Promise<AdminRechargeOrder> {
+  return authRequest<AdminRechargeOrder>(`/admin/recharge-orders/${orderId}/reject`, token, {
+    method: "POST",
+  });
+}
+
+export function adminGetRechargeQr(token: string): Promise<{ url: string }> {
+  return authRequest<{ url: string }>("/admin/recharge-qr", token);
+}
+
+export function adminSetRechargeQr(token: string, url: string): Promise<{ url: string }> {
+  return authRequest<{ url: string }>("/admin/recharge-qr", token, {
+    method: "PUT",
+    body: JSON.stringify({ url }),
+  });
+}
+
 // ---- Admin 内容管理 ----
 export type ContentType = "knowledge" | "sql" | "interview" | "project";
 

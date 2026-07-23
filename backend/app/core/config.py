@@ -51,6 +51,29 @@ class Settings(BaseSettings):
     sql_module_unlock_points: int = 50
     interview_module_unlock_points: int = 50
 
+    # ---- 积分充值（人工确认）----
+    # 收款码图片地址（管理员的个人微信/支付宝收款码）。留空时前端提示未配置。
+    recharge_qr_url: str = ""
+    # 充值套餐，逗号分隔的 "金额:积分"（金额为人民币元）。用 str 避免 JSON 解析。
+    recharge_packages: str = "6:60,30:330,98:1200,198:2600"
+
+    @property
+    def recharge_package_list(self) -> list[dict[str, int]]:
+        packages: list[dict[str, int]] = []
+        for item in self.recharge_packages.split(","):
+            item = item.strip()
+            if not item or ":" not in item:
+                continue
+            amount_str, points_str = item.split(":", 1)
+            try:
+                amount = int(amount_str.strip())
+                points = int(points_str.strip())
+            except ValueError:
+                continue
+            if amount > 0 and points > 0:
+                packages.append({"amount": amount, "points": points})
+        return packages
+
     # ---- 微信支付（v3 Native）占位配置；获取方式见 docs/deployment.md ----
     wechat_app_id: str = ""
     wechat_mch_id: str = ""
