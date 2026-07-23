@@ -1319,6 +1319,10 @@ export interface PointsConfig {
   free_module_quota: number;
   sql_module_unlock_points: number;
   interview_module_unlock_points: number;
+  reward_knowledge: number;
+  reward_sql: number;
+  reward_interview: number;
+  reward_project: number;
   packages: PointsPackage[];
 }
 

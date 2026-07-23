@@ -4,15 +4,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.points.models import PointLedger
 from app.modules.points.repository import PointsRepository
+from app.modules.settings.service import REWARD_KEY_BY_TYPE, get_int_setting
 from app.modules.users.repository import UserRepository
 
-# 各类内容审核通过后的积分奖励（见 docs/points-and-payment.md）。
+# 各类内容审核通过后的积分奖励默认值（后台「系统配置」可覆盖，见 docs/points-and-payment.md）。
 POINTS_BY_TYPE: dict[str, int] = {
     "knowledge": 10,
     "sql": 10,
     "interview": 20,
     "project": 100,
 }
+
+
+async def reward_points(db: AsyncSession, target_type: str) -> int:
+    """某类投稿审核通过后的奖励积分：优先取后台配置，回退默认值。"""
+    default = POINTS_BY_TYPE.get(target_type, 0)
+    key = REWARD_KEY_BY_TYPE.get(target_type)
+    if key is None:
+        return default
+    return await get_int_setting(db, key, default)
 
 
 class PointsService:

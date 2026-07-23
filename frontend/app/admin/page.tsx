@@ -426,6 +426,55 @@ function PointsRules() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">投稿奖励积分（审核通过后发放）</h3>
+            <p className="mb-3 text-xs text-slate-400">
+              用户投稿被审核发布后，按内容类型一次性发放对应积分（幂等，仅发一次）。
+            </p>
+            <div className="grid gap-4 sm:grid-cols-4">
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-slate-700">八股</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cfg.reward_knowledge}
+                  onChange={(e) => patch({ reward_knowledge: Number(e.target.value) })}
+                  className={numCls}
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-slate-700">SQL</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cfg.reward_sql}
+                  onChange={(e) => patch({ reward_sql: Number(e.target.value) })}
+                  className={numCls}
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-slate-700">面经</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cfg.reward_interview}
+                  onChange={(e) => patch({ reward_interview: Number(e.target.value) })}
+                  className={numCls}
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-slate-700">项目</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cfg.reward_project}
+                  onChange={(e) => patch({ reward_project: Number(e.target.value) })}
+                  className={numCls}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-700">充值套餐（金额 → 到账积分）</h3>
               <button

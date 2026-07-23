@@ -93,6 +93,10 @@ class PointsConfigOut(BaseModel):
     free_module_quota: int
     sql_module_unlock_points: int
     interview_module_unlock_points: int
+    reward_knowledge: int
+    reward_sql: int
+    reward_interview: int
+    reward_project: int
     packages: list[PointsPackage]
 
 
@@ -100,4 +104,8 @@ class PointsConfigIn(BaseModel):
     free_module_quota: int = Field(ge=0, le=100000)
     sql_module_unlock_points: int = Field(ge=0, le=1000000)
     interview_module_unlock_points: int = Field(ge=0, le=1000000)
+    reward_knowledge: int = Field(ge=0, le=1000000)
+    reward_sql: int = Field(ge=0, le=1000000)
+    reward_interview: int = Field(ge=0, le=1000000)
+    reward_project: int = Field(ge=0, le=1000000)
     packages: list[PointsPackage] = Field(default_factory=list, max_length=20)

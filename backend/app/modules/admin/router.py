@@ -37,11 +37,16 @@ from app.modules.payment.recharge import (
     list_packages,
 )
 from app.modules.points.models import PointLedger
+from app.modules.points.service import POINTS_BY_TYPE
 from app.modules.projects.models import Project
 from app.modules.settings.service import (
     KEY_FREE_QUOTA,
     KEY_INTERVIEW_UNLOCK,
     KEY_RECHARGE_PACKAGES,
+    KEY_REWARD_INTERVIEW,
+    KEY_REWARD_KNOWLEDGE,
+    KEY_REWARD_PROJECT,
+    KEY_REWARD_SQL,
     KEY_SQL_UNLOCK,
     get_int_setting,
     set_setting,
@@ -412,6 +417,14 @@ async def _points_config(db: AsyncSession) -> PointsConfigOut:
         interview_module_unlock_points=await get_int_setting(
             db, KEY_INTERVIEW_UNLOCK, s.interview_module_unlock_points
         ),
+        reward_knowledge=await get_int_setting(
+            db, KEY_REWARD_KNOWLEDGE, POINTS_BY_TYPE["knowledge"]
+        ),
+        reward_sql=await get_int_setting(db, KEY_REWARD_SQL, POINTS_BY_TYPE["sql"]),
+        reward_interview=await get_int_setting(
+            db, KEY_REWARD_INTERVIEW, POINTS_BY_TYPE["interview"]
+        ),
+        reward_project=await get_int_setting(db, KEY_REWARD_PROJECT, POINTS_BY_TYPE["project"]),
         packages=[
             PointsPackage(amount=p["amount"], points=p["points"]) for p in await list_packages(db)
         ],
@@ -430,6 +443,10 @@ async def set_points_config(
     await set_setting(db, KEY_FREE_QUOTA, str(data.free_module_quota))
     await set_setting(db, KEY_SQL_UNLOCK, str(data.sql_module_unlock_points))
     await set_setting(db, KEY_INTERVIEW_UNLOCK, str(data.interview_module_unlock_points))
+    await set_setting(db, KEY_REWARD_KNOWLEDGE, str(data.reward_knowledge))
+    await set_setting(db, KEY_REWARD_SQL, str(data.reward_sql))
+    await set_setting(db, KEY_REWARD_INTERVIEW, str(data.reward_interview))
+    await set_setting(db, KEY_REWARD_PROJECT, str(data.reward_project))
     raw = ",".join(f"{p.amount}:{p.points}" for p in data.packages)
     await set_setting(db, KEY_RECHARGE_PACKAGES, raw)
     return await _points_config(db)

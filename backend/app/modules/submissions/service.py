@@ -13,7 +13,7 @@ from app.modules.knowledge import service as knowledge_service
 from app.modules.llm.base import LLMClient
 from app.modules.llm.factory import get_llm_client
 from app.modules.notifications.service import NotificationService
-from app.modules.points.service import POINTS_BY_TYPE, PointsService
+from app.modules.points.service import PointsService, reward_points
 from app.modules.projects import service as project_service
 from app.modules.sql_bank import service as sql_service
 from app.modules.submissions.models import Submission
@@ -195,7 +195,7 @@ class SubmissionService:
 
         await PointsService(self.db).grant(
             user_id=submission.user_id,
-            delta=POINTS_BY_TYPE[submission.target_type],
+            delta=await reward_points(self.db, submission.target_type),
             reason=f"投稿发布：{submission.target_type}",
             ref_type="submission",
             ref_id=submission.id,
