@@ -92,9 +92,9 @@ async def my_entitlements(
 
 # ---- 积分充值（人工确认）----
 @router.get("/recharge/config", response_model=RechargeConfigOut)
-async def recharge_config() -> RechargeConfigOut:
+async def recharge_config(db: AsyncSession = Depends(get_db)) -> RechargeConfigOut:
     return RechargeConfigOut(
-        qr_url=recharge_service.qr_url(),
+        qr_url=await recharge_service.get_qr_url(db),
         packages=[RechargePackage(**p) for p in recharge_service.list_packages()],
     )
 

@@ -13,6 +13,8 @@ from app.modules.admin.schemas import (
     AdminUserUpdate,
     ModuleAccessItem,
     ProjectAccessItem,
+    RechargeQrIn,
+    RechargeQrOut,
 )
 from app.modules.catalog import service as catalog_service
 from app.modules.catalog.repository import CategoryRepository
@@ -24,9 +26,10 @@ from app.modules.catalog.schemas import (
     FolderTree,
 )
 from app.modules.payment.models import Entitlement
-from app.modules.payment.recharge import RechargeService
+from app.modules.payment.recharge import RECHARGE_QR_KEY, RechargeService, get_qr_url
 from app.modules.points.models import PointLedger
 from app.modules.projects.models import Project
+from app.modules.settings.service import set_setting
 from app.modules.submissions.repository import SubmissionRepository
 from app.modules.submissions.schemas import ApproveIn, RejectIn, SubmissionOut
 from app.modules.submissions.service import SubmissionService
@@ -367,3 +370,15 @@ async def reject_recharge_order(
 ) -> AdminRechargeOrderOut:
     order = await RechargeService(db).reject(order_id)
     return (await _recharge_out(db, [order]))[0]
+
+
+# ---- 收款码设置（管理员上传后即时生效）----
+@router.get("/recharge-qr", response_model=RechargeQrOut)
+async def get_recharge_qr(db: AsyncSession = Depends(get_db)) -> RechargeQrOut:
+    return RechargeQrOut(url=await get_qr_url(db))
+
+
+@router.put("/recharge-qr", response_model=RechargeQrOut)
+async def set_recharge_qr(data: RechargeQrIn, db: AsyncSession = Depends(get_db)) -> RechargeQrOut:
+    await set_setting(db, RECHARGE_QR_KEY, data.url.strip())
+    return RechargeQrOut(url=data.url.strip())

@@ -16,6 +16,10 @@ from app.core.config import get_settings
 from app.modules.payment.models import Order
 from app.modules.payment.repository import PaymentRepository
 from app.modules.points.service import PointsService
+from app.modules.settings.service import get_setting
+
+# 收款码在 site_settings 中的 key（管理员后台上传后即时生效，优先于环境变量）。
+RECHARGE_QR_KEY = "recharge_qr_url"
 
 
 def list_packages() -> list[dict[str, int]]:
@@ -24,8 +28,10 @@ def list_packages() -> list[dict[str, int]]:
     return [{"id": i, **pkg} for i, pkg in enumerate(packages)]
 
 
-def qr_url() -> str:
-    return get_settings().recharge_qr_url
+async def get_qr_url(db: AsyncSession) -> str:
+    """收款码地址：优先取管理员在后台上传的值，回退到环境变量 RECHARGE_QR_URL。"""
+    saved = await get_setting(db, RECHARGE_QR_KEY)
+    return saved or get_settings().recharge_qr_url
 
 
 class RechargeService:

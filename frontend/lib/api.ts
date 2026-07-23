@@ -1247,6 +1247,17 @@ export function adminRejectRecharge(token: string, orderId: number): Promise<Adm
   });
 }
 
+export function adminGetRechargeQr(token: string): Promise<{ url: string }> {
+  return authRequest<{ url: string }>("/admin/recharge-qr", token);
+}
+
+export function adminSetRechargeQr(token: string, url: string): Promise<{ url: string }> {
+  return authRequest<{ url: string }>("/admin/recharge-qr", token, {
+    method: "PUT",
+    body: JSON.stringify({ url }),
+  });
+}
+
 // ---- Admin 内容管理 ----
 export type ContentType = "knowledge" | "sql" | "interview" | "project";
 

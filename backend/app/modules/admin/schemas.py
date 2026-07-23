@@ -71,3 +71,11 @@ class AdminRechargeOrderOut(BaseModel):
     points_delta: int | None = None
     status: str
     created_at: dt.datetime
+
+
+class RechargeQrOut(BaseModel):
+    url: str
+
+
+class RechargeQrIn(BaseModel):
+    url: str

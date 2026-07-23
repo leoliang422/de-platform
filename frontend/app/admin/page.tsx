@@ -10,6 +10,7 @@ import {
   type AdminConversation,
   adminApprove,
   adminConfirmRecharge,
+  adminGetRechargeQr,
   adminGetUserAccess,
   adminListRechargeOrders,
   adminListSubmissions,
@@ -18,6 +19,7 @@ import {
   adminRejectRecharge,
   adminSetModuleAccess,
   adminSetProjectAccess,
+  adminSetRechargeQr,
   adminUpdateUser,
   type AdminRechargeOrder,
   type AdminSubmission,
@@ -28,6 +30,7 @@ import {
   getAdminConversation,
   getAdminConversations,
   replyToUser,
+  uploadImage,
 } from "@/lib/api";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -104,6 +107,70 @@ function AdminInner() {
   );
 }
 
+function RechargeQrSetting() {
+  const [url, setUrl] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    adminGetRechargeQr(token)
+      .then((r) => setUrl(r.url))
+      .catch(() => setUrl(""));
+  }, []);
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const token = getAccessToken();
+    if (!file || !token) return;
+    setUploading(true);
+    setMsg(null);
+    setError(null);
+    try {
+      const { url: uploaded } = await uploadImage(token, file);
+      const saved = await adminSetRechargeQr(token, uploaded);
+      setUrl(saved.url);
+      setMsg("收款码已更新，用户充值页即时生效。");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "上传失败");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="mb-3 text-lg font-semibold text-slate-900">收款码设置</h2>
+      <div className="flex flex-col items-start gap-4 sm:flex-row">
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt="当前收款码"
+            className="h-40 w-40 rounded-lg border border-slate-200 object-contain"
+          />
+        ) : (
+          <div className="flex h-40 w-40 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400">
+            尚未设置
+          </div>
+        )}
+        <div className="flex-1 text-sm text-slate-600">
+          <p>上传你的微信 / 支付宝个人收款码图片，用户充值时会看到它。</p>
+          <label className="mt-3 inline-block cursor-pointer rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            {uploading ? "上传中…" : url ? "更换收款码" : "上传收款码"}
+            <input type="file" accept="image/*" onChange={onPick} className="hidden" disabled={uploading} />
+          </label>
+          {msg && <p className="mt-2 text-green-600">{msg}</p>}
+          {error && <p className="mt-2 text-red-600">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RechargeReview() {
   const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +220,8 @@ function RechargeReview() {
 
   return (
     <div className="mt-10">
+      <RechargeQrSetting />
+
       <h2 className="mb-3 text-lg font-semibold text-slate-900">充值审核</h2>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {orders.length === 0 ? (
