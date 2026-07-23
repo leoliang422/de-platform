@@ -8,7 +8,7 @@
 
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,6 +25,10 @@ class ContactMessage(Base):
     from_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sender_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # 附件（图片/文件）：url + 原文件名 + 类型（image / file）。纯文本消息为空。
+    attachment_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attachment_kind: Mapped[str | None] = mapped_column(String(10), nullable=True)
     read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True

@@ -7,6 +7,7 @@ from app.modules.applications.schemas import (
     CalendarEventCreate,
     CalendarEventOut,
     CalendarEventUpdate,
+    InterviewCompanyOut,
     ListCreate,
     ListOut,
     ListUpdate,
@@ -26,7 +27,16 @@ async def list_lists(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[ListOut]:
-    return await ApplicationService(db).list_lists(current_user.id)
+    lists = await ApplicationService(db).list_lists(current_user.id)
+    return [ListOut.model_validate(x) for x in lists]
+
+
+@router.get("/interview-companies", response_model=list[InterviewCompanyOut])
+async def interview_companies(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[InterviewCompanyOut]:
+    return await ApplicationService(db).interview_companies()
 
 
 @router.post("/lists", response_model=ListOut, status_code=status.HTTP_201_CREATED)

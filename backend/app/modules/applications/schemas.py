@@ -29,6 +29,7 @@ class RecordCreate(BaseModel):
     position: str = Field(default="", max_length=120)
     applied_date: dt.date | None = None
     status: ApplicationStatus = "applied"
+    interview_company_id: int | None = None
 
 
 class RecordUpdate(BaseModel):
@@ -37,6 +38,7 @@ class RecordUpdate(BaseModel):
     position: str | None = Field(default=None, max_length=120)
     applied_date: dt.date | None = None
     status: ApplicationStatus | None = None
+    interview_company_id: int | None = None
 
 
 class RecordOut(BaseModel):
@@ -50,8 +52,16 @@ class RecordOut(BaseModel):
     applied_date: dt.date | None = None
     status: str
     order_index: int
-    # 若当前用户为该公司投过面经，则为对应公司 id（前端可直接跳转），否则 None。
+    # 用户手动关联的面经公司 id（可空）；前端另会按公司名自动匹配作为兜底建议。
     interview_company_id: int | None = None
+
+
+class InterviewCompanyOut(BaseModel):
+    """有面经可关联的公司（供投递记录下拉选择）。"""
+
+    id: int
+    name: str
+    post_count: int
 
 
 # ---- 投递列表 ----

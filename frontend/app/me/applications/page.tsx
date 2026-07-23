@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BackLink, PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
@@ -14,12 +14,14 @@ import {
   deleteApplicationRecord,
   getAccessToken,
   getApplicationLists,
+  getInterviewCompanies,
   renameApplicationList,
   updateApplicationRecord,
   type ApplicationList,
   type ApplicationRecord,
   type ApplicationStatus,
   type CompanyNature,
+  type InterviewCompany,
 } from "@/lib/api";
 
 import { CalendarPanel } from "./calendar";
@@ -58,6 +60,8 @@ function ApplicationsInner() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 有面经的公司（供「选择关联」下拉 + 按公司名自动匹配）。
+  const [companies, setCompanies] = useState<InterviewCompany[]>([]);
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -75,7 +79,16 @@ function ApplicationsInner() {
 
   useEffect(() => {
     load();
+    const token = getAccessToken();
+    if (token) getInterviewCompanies(token).then(setCompanies).catch(() => {});
   }, [load]);
+
+  // 公司名（归一化）→ 公司 id，用于未手动关联时自动匹配面经。
+  const nameToId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of companies) m.set(c.name.trim().toLowerCase(), c.id);
+    return m;
+  }, [companies]);
 
   const active = lists.find((l) => l.id === activeId) ?? null;
 
@@ -202,7 +215,7 @@ function ApplicationsInner() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse text-sm">
+                <table className="w-full min-w-[840px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-500">
                       <th className="w-10 px-2 py-2">#</th>
@@ -211,7 +224,7 @@ function ApplicationsInner() {
                       <th className="px-2 py-2">岗位名称</th>
                       <th className="w-36 px-2 py-2">投递时间</th>
                       <th className="w-32 px-2 py-2">投递状态</th>
-                      <th className="w-24 px-2 py-2">面经</th>
+                      <th className="w-44 px-2 py-2">关联面经</th>
                       <th className="w-12 px-2 py-2"></th>
                     </tr>
                   </thead>
@@ -228,6 +241,8 @@ function ApplicationsInner() {
                           key={rec.id}
                           index={i + 1}
                           rec={rec}
+                          companies={companies}
+                          nameToId={nameToId}
                           onUpdate={(patch) => handleUpdateRecord(rec, patch)}
                           onDelete={() => handleDeleteRecord(rec)}
                         />
@@ -257,16 +272,24 @@ function ApplicationsInner() {
 function RecordRow({
   index,
   rec,
+  companies,
+  nameToId,
   onUpdate,
   onDelete,
 }: {
   index: number;
   rec: ApplicationRecord;
+  companies: InterviewCompany[];
+  nameToId: Map<string, number>;
   onUpdate: (patch: Partial<ApplicationRecord>) => void;
   onDelete: () => void;
 }) {
   const [company, setCompany] = useState(rec.company_name);
   const [position, setPosition] = useState(rec.position);
+
+  // 生效的面经公司：优先手动关联，否则按公司名自动匹配。
+  const suggestedId = nameToId.get((company || rec.company_name).trim().toLowerCase()) ?? null;
+  const effectiveId = rec.interview_company_id ?? suggestedId;
 
   // 服务端/其它来源变更时同步本地输入。
   useEffect(() => setCompany(rec.company_name), [rec.company_name]);
@@ -334,27 +357,42 @@ function RecordRow({
         </select>
       </td>
       <td className="px-2 py-1">
-        {rec.interview_company_id ? (
-          <Link
-            href={`/interview/${rec.interview_company_id}`}
-            className="text-xs font-medium text-brand-600 hover:underline"
-            title="查看你为该公司上传的面经"
+        <div className="flex flex-col gap-1">
+          <select
+            value={String(effectiveId ?? "")}
+            onChange={(e) =>
+              onUpdate({ interview_company_id: e.target.value ? Number(e.target.value) : null })
+            }
+            className={`${cellInput} cursor-pointer`}
+            title="选择要关联的面经公司"
           >
-            查看面经 →
-          </Link>
-        ) : (company || rec.company_name).trim() ? (
-          <Link
-            href={`/submit?type=interview&company=${encodeURIComponent(
-              (company || rec.company_name).trim(),
-            )}`}
-            className="text-xs text-slate-400 hover:text-brand-600 hover:underline"
-            title="还没这家公司的面经，去上传一份（可获得积分）"
-          >
-            + 上传面经
-          </Link>
-        ) : (
-          <span className="text-xs text-slate-300">—</span>
-        )}
+            <option value="">未关联</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}（{c.post_count}）
+              </option>
+            ))}
+          </select>
+          {effectiveId ? (
+            <Link
+              href={`/interview/${effectiveId}`}
+              className="text-xs font-medium text-brand-600 hover:underline"
+              title="跳转到关联的面经"
+            >
+              查看面经 →
+            </Link>
+          ) : (company || rec.company_name).trim() ? (
+            <Link
+              href={`/submit?type=interview&company=${encodeURIComponent(
+                (company || rec.company_name).trim(),
+              )}`}
+              className="text-xs text-slate-400 hover:text-brand-600 hover:underline"
+              title="还没这家公司的面经，去上传一份（可获得积分）"
+            >
+              + 上传面经
+            </Link>
+          ) : null}
+        </div>
       </td>
       <td className="px-2 py-1 text-center">
         <button

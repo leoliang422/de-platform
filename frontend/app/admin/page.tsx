@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ChatComposer, MessageBubbles } from "@/components/chat";
 import { PageHeader, Prose } from "@/components/content";
 import { FolderManager } from "@/components/folder-manager";
 import { RequireAuth } from "@/components/guard";
@@ -101,8 +102,6 @@ function AdminMessages() {
   const [convs, setConvs] = useState<AdminConversation[]>([]);
   const [activeUser, setActiveUser] = useState<number | null>(null);
   const [msgs, setMsgs] = useState<ContactMessage[]>([]);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadConvs = useCallback(() => {
@@ -134,20 +133,13 @@ function AdminMessages() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
 
-  async function handleReply() {
-    const body = draft.trim();
-    if (!body || activeUser == null || sending) return;
+  async function handleReply(payload: Parameters<typeof replyToUser>[2]) {
+    if (activeUser == null) return;
     const token = getAccessToken();
     if (!token) return;
-    setSending(true);
-    try {
-      const msg = await replyToUser(token, activeUser, body);
-      setMsgs((prev) => [...prev, msg]);
-      setDraft("");
-      loadConvs();
-    } finally {
-      setSending(false);
-    }
+    const msg = await replyToUser(token, activeUser, payload);
+    setMsgs((prev) => [...prev, msg]);
+    loadConvs();
   }
 
   const activeConv = convs.find((c) => c.user_id === activeUser);
@@ -199,46 +191,10 @@ function AdminMessages() {
                 {activeConv?.nickname ?? `用户 #${activeUser}`}
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                {msgs.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`flex ${m.from_admin ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[75%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
-                        m.from_admin
-                          ? "rounded-tr-sm bg-brand-600 text-white"
-                          : "rounded-tl-sm bg-slate-100 text-slate-800"
-                      }`}
-                    >
-                      {m.body}
-                    </div>
-                  </div>
-                ))}
+                <MessageBubbles messages={msgs} selfIsAdmin />
                 <div ref={bottomRef} />
               </div>
-              <div className="flex items-end gap-2 border-t border-slate-200 p-3">
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleReply();
-                    }
-                  }}
-                  rows={2}
-                  placeholder="回复用户…（⌘/Ctrl + Enter 发送）"
-                  className="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-                />
-                <button
-                  onClick={handleReply}
-                  disabled={sending || !draft.trim()}
-                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  发送
-                </button>
-              </div>
+              <ChatComposer onSend={handleReply} placeholder="回复用户…（⌘/Ctrl + Enter 发送）" />
             </>
           )}
         </div>

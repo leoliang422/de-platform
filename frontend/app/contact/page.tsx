@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ChatComposer, MessageBubbles } from "@/components/chat";
 import { PageHeader } from "@/components/content";
 import { RequireAuth } from "@/components/guard";
 import {
   type ContactMessage,
+  type SendMessagePayload,
   getAccessToken,
   getMyMessages,
   sendMessageToAdmin,
@@ -22,9 +24,6 @@ export default function ContactPage() {
 function ContactInner() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -46,22 +45,11 @@ function ContactInner() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleSend() {
-    const body = draft.trim();
-    if (!body || sending) return;
+  async function handleSend(payload: SendMessagePayload) {
     const token = getAccessToken();
     if (!token) return;
-    setSending(true);
-    setError(null);
-    try {
-      const msg = await sendMessageToAdmin(token, body);
-      setMessages((prev) => [...prev, msg]);
-      setDraft("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "发送失败");
-    } finally {
-      setSending(false);
-    }
+    const msg = await sendMessageToAdmin(token, payload);
+    setMessages((prev) => [...prev, msg]);
   }
 
   return (
@@ -77,61 +65,12 @@ function ContactInner() {
               还没有消息，发一条试试吧～管理员会尽快回复你。
             </p>
           ) : (
-            messages.map((m) => (
-              <div
-                key={m.id}
-                className={`flex ${m.from_admin ? "justify-start" : "justify-end"}`}
-              >
-                <div className="max-w-[75%]">
-                  <div
-                    className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
-                      m.from_admin
-                        ? "rounded-tl-sm bg-slate-100 text-slate-800"
-                        : "rounded-tr-sm bg-brand-600 text-white"
-                    }`}
-                  >
-                    {m.body}
-                  </div>
-                  <div
-                    className={`mt-1 text-[11px] text-slate-400 ${
-                      m.from_admin ? "text-left" : "text-right"
-                    }`}
-                  >
-                    {m.from_admin ? "管理员 · " : ""}
-                    {new Date(m.created_at).toLocaleString("zh-CN")}
-                  </div>
-                </div>
-              </div>
-            ))
+            <MessageBubbles messages={messages} selfIsAdmin={false} />
           )}
           <div ref={bottomRef} />
         </div>
 
-        <div className="border-t border-slate-200 p-3">
-          {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
-          <div className="flex items-end gap-2">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              rows={2}
-              placeholder="输入消息…（⌘/Ctrl + Enter 发送）"
-              className="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            />
-            <button
-              onClick={handleSend}
-              disabled={sending || !draft.trim()}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              发送
-            </button>
-          </div>
-        </div>
+        <ChatComposer onSend={handleSend} />
       </div>
     </div>
   );

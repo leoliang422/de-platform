@@ -297,8 +297,18 @@ export interface ContactMessage {
   id: number;
   from_admin: boolean;
   body: string;
+  attachment_url: string | null;
+  attachment_name: string | null;
+  attachment_kind: "image" | "file" | null;
   read_at: string | null;
   created_at: string;
+}
+
+export interface SendMessagePayload {
+  body?: string;
+  attachment_url?: string;
+  attachment_name?: string;
+  attachment_kind?: "image" | "file";
 }
 
 export interface AdminConversation {
@@ -318,10 +328,13 @@ export function getMyMessageUnread(token: string): Promise<{ unread: number }> {
   return authRequest<{ unread: number }>("/messages/unread_count", token);
 }
 
-export function sendMessageToAdmin(token: string, body: string): Promise<ContactMessage> {
+export function sendMessageToAdmin(
+  token: string,
+  payload: SendMessagePayload,
+): Promise<ContactMessage> {
   return authRequest<ContactMessage>("/messages", token, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -340,11 +353,11 @@ export function getAdminConversation(token: string, userId: number): Promise<Con
 export function replyToUser(
   token: string,
   userId: number,
-  body: string,
+  payload: SendMessagePayload,
 ): Promise<ContactMessage> {
   return authRequest<ContactMessage>(`/admin/messages/${userId}`, token, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -375,6 +388,33 @@ export async function uploadImage(token: string, file: File): Promise<{ url: str
     throw new ApiError(res.status, detail);
   }
   return (await res.json()) as { url: string };
+}
+
+export interface AttachmentUpload {
+  url: string;
+  filename: string;
+  kind: "image" | "file";
+}
+
+export async function uploadAttachment(token: string, file: File): Promise<AttachmentUpload> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE_URL}/files/attachment`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = `上传失败 (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as AttachmentUpload;
 }
 
 export interface ExtractResult {
@@ -1270,8 +1310,18 @@ export interface CalendarEvent {
   color: string | null;
 }
 
+export interface InterviewCompany {
+  id: number;
+  name: string;
+  post_count: number;
+}
+
 export function getApplicationLists(token: string): Promise<ApplicationList[]> {
   return authRequest<ApplicationList[]>("/applications/lists", token);
+}
+
+export function getInterviewCompanies(token: string): Promise<InterviewCompany[]> {
+  return authRequest<InterviewCompany[]>("/applications/interview-companies", token);
 }
 
 export function createApplicationList(token: string, name: string): Promise<ApplicationList> {

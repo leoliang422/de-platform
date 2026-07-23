@@ -40,7 +40,7 @@ async def send_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageOut:
-    msg = await ContactMessageService(db).send_from_user(current_user.id, data.body)
+    msg = await ContactMessageService(db).send_from_user(current_user.id, data)
     return MessageOut.model_validate(msg)
 
 
@@ -74,5 +74,5 @@ async def reply(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MessageOut:
-    msg = await ContactMessageService(db).send_from_admin(user_id, admin.id, data.body)
+    msg = await ContactMessageService(db).send_from_admin(user_id, admin.id, data)
     return MessageOut.model_validate(msg)

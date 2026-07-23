@@ -47,6 +47,47 @@ async def upload_image(
     return {"url": storage.public_url(key, str(request.base_url))}
 
 
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
+
+
+@router.post("/attachment", status_code=status.HTTP_201_CREATED)
+async def upload_attachment(
+    request: Request,
+    file: UploadFile,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """通用附件上传（私信里发送图片/文件）。图片可内联展示，其它作为下载链接。"""
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="空文件")
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="文件不能超过 10MB",
+        )
+    content_type = file.content_type or "application/octet-stream"
+    filename = file.filename or "file"
+    # 扩展名：优先按已知类型表，否则取文件名后缀，兜底 .bin
+    ext = (
+        IMAGE_TYPES.get(content_type)
+        or ALLOWED_TYPES.get(content_type)
+        or (f".{filename.rsplit('.', 1)[-1]}" if "." in filename else ".bin")
+    )
+    kind = "image" if content_type in IMAGE_TYPES else "file"
+
+    storage = get_storage()
+    try:
+        key = await storage.save(data=data, ext=ext, content_type=content_type)
+    except StorageNotConfigured as exc:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)) from exc
+
+    return {
+        "url": storage.public_url(key, str(request.base_url)),
+        "filename": filename,
+        "kind": kind,
+    }
+
+
 MAX_EXTRACT_BYTES = 10 * 1024 * 1024  # 10MB
 
 

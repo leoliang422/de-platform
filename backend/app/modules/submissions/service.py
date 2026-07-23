@@ -125,9 +125,13 @@ class SubmissionService:
         if submission is None or submission.status != "processing":
             return submission
         try:
-            submission.processed_md = await self.llm.format_content(
-                submission.raw_content, submission.target_type
-            )
+            raw = (submission.raw_content or "").strip()
+            # 面经内容是结构化 qa_items（正文置空，加工结果也不参与发布）；空正文同理。
+            # 这两种情况跳过大模型加工，既避免无谓调用，也避免空 messages 触发 400。
+            if submission.target_type == "interview" or not raw:
+                submission.processed_md = submission.raw_content
+            else:
+                submission.processed_md = await self.llm.format_content(raw, submission.target_type)
             submission.status = "pending_review"
             submission.reject_reason = None
         except Exception as exc:  # noqa: BLE001 - 记录失败原因，避免卡在 processing

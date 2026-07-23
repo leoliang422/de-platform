@@ -1,6 +1,7 @@
 import datetime as dt
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MessageOut(BaseModel):
@@ -9,12 +10,24 @@ class MessageOut(BaseModel):
     id: int
     from_admin: bool
     body: str
+    attachment_url: str | None = None
+    attachment_name: str | None = None
+    attachment_kind: str | None = None
     read_at: dt.datetime | None = None
     created_at: dt.datetime
 
 
 class SendMessageIn(BaseModel):
-    body: str = Field(min_length=1, max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    attachment_url: str | None = Field(default=None, max_length=500)
+    attachment_name: str | None = Field(default=None, max_length=255)
+    attachment_kind: Literal["image", "file"] | None = None
+
+    @model_validator(mode="after")
+    def _require_content(self) -> "SendMessageIn":
+        if not self.body.strip() and not self.attachment_url:
+            raise ValueError("消息内容不能为空")
+        return self
 
 
 class UnreadCountOut(BaseModel):

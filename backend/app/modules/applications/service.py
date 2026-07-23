@@ -14,11 +14,10 @@ from app.modules.applications.models import (
 from app.modules.applications.schemas import (
     CalendarEventCreate,
     CalendarEventUpdate,
+    InterviewCompanyOut,
     ListCreate,
-    ListOut,
     ListUpdate,
     RecordCreate,
-    RecordOut,
     RecordUpdate,
 )
 from app.modules.interview.models import Company, InterviewPost
@@ -44,41 +43,35 @@ class ApplicationService:
         self.db = db
 
     # ---- 列表 ----
-    async def _authored_company_map(self, user_id: int) -> dict[str, int]:
-        """当前用户投过面经的「公司名(归一化) → 公司 id」映射，用于投递记录关联面经。"""
-        rows = await self.db.execute(
-            select(Company.name, InterviewPost.company_id)
-            .join(InterviewPost, InterviewPost.company_id == Company.id)
-            .where(InterviewPost.author_id == user_id)
-        )
-        result: dict[str, int] = {}
-        for name, company_id in rows.all():
-            key = (name or "").strip().lower()
-            if key:
-                result[key] = company_id
-        return result
-
-    async def list_lists(self, user_id: int) -> list[ListOut]:
+    async def list_lists(self, user_id: int) -> list[ApplicationList]:
         result = await self.db.execute(
             select(ApplicationList)
             .where(ApplicationList.user_id == user_id)
             .order_by(ApplicationList.order_index, ApplicationList.id)
         )
-        lists = list(result.scalars().all())
-        # 关联本人面经：给每条记录填上 interview_company_id（有则前端可直接跳转面经）。
-        company_map = await self._authored_company_map(user_id)
-        out: list[ListOut] = []
-        for lst in lists:
-            records: list[RecordOut] = []
-            for rec in lst.records:
-                ro = RecordOut.model_validate(rec)
-                key = (rec.company_name or "").strip().lower()
-                ro.interview_company_id = company_map.get(key) if key else None
-                records.append(ro)
-            out.append(
-                ListOut(id=lst.id, name=lst.name, order_index=lst.order_index, records=records)
+        return list(result.scalars().all())
+
+    async def interview_companies(self) -> list[InterviewCompanyOut]:
+        """列出有已发布面经的公司，供投递记录「选择关联」下拉使用。"""
+        rows = await self.db.execute(
+            select(Company.id, Company.name, func.count(InterviewPost.id))
+            .join(InterviewPost, InterviewPost.company_id == Company.id)
+            .where(InterviewPost.status == "published")
+            .group_by(Company.id, Company.name)
+            .order_by(Company.name)
+        )
+        return [
+            InterviewCompanyOut(id=cid, name=name, post_count=int(cnt))
+            for cid, name, cnt in rows.all()
+        ]
+
+    async def _validate_company(self, company_id: int | None) -> None:
+        if company_id is None:
+            return
+        if await self.db.get(Company, company_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="关联的面经公司不存在"
             )
-        return out
 
     async def _get_list(self, user_id: int, list_id: int) -> ApplicationList:
         lst = await self.db.get(ApplicationList, list_id)
@@ -123,6 +116,7 @@ class ApplicationService:
 
     async def add_record(self, user_id: int, list_id: int, data: RecordCreate) -> ApplicationRecord:
         await self._get_list(user_id, list_id)
+        await self._validate_company(data.interview_company_id)
         max_order = await self.db.scalar(
             select(func.coalesce(func.max(ApplicationRecord.order_index), -1)).where(
                 ApplicationRecord.list_id == list_id
@@ -135,6 +129,7 @@ class ApplicationService:
             position=data.position.strip(),
             applied_date=data.applied_date,
             status=data.status,
+            interview_company_id=data.interview_company_id,
             order_index=(max_order or 0) + 1,
         )
         self.db.add(rec)
@@ -147,6 +142,8 @@ class ApplicationService:
     ) -> ApplicationRecord:
         rec = await self._get_record(user_id, record_id)
         fields = data.model_dump(exclude_unset=True)
+        if "interview_company_id" in fields:
+            await self._validate_company(fields["interview_company_id"])
         for key, value in fields.items():
             if key in ("company_name", "position") and isinstance(value, str):
                 value = value.strip()

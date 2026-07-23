@@ -70,6 +70,10 @@ class ApplicationRecord(Base):
     applied_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="applied")
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 手动关联的面经公司（用户显式选择）。为空时前端回退到按公司名自动匹配。
+    interview_company_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

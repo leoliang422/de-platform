@@ -1,6 +1,9 @@
 """投递记录管理：投递列表 / 记录 / 面试日历（均按用户隔离）。"""
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.interview.models import Company, InterviewPost
 
 
 async def _token(client: AsyncClient, email: str) -> str:
@@ -101,6 +104,56 @@ async def test_lists_isolated_between_users(client: AsyncClient) -> None:
             json={"company_name": "x"},
         )
     ).status_code == 404
+
+
+async def test_interview_companies_and_manual_link(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    token = await _token(client, "link@test.io")
+
+    # 造一家有已发布面经的公司
+    company = Company(name="小马智行")
+    db.add(company)
+    await db.flush()
+    db.add(InterviewPost(company_id=company.id, status="published"))
+    await db.commit()
+
+    # 下拉能拿到该公司
+    companies = (
+        await client.get("/applications/interview-companies", headers=_auth(token))
+    ).json()
+    assert any(c["id"] == company.id and c["post_count"] == 1 for c in companies)
+
+    list_id = (
+        await client.post("/applications/lists", headers=_auth(token), json={"name": "秋招"})
+    ).json()["id"]
+
+    # 创建时即手动关联面经
+    rec = (
+        await client.post(
+            f"/applications/lists/{list_id}/records",
+            headers=_auth(token),
+            json={"company_name": "小马智行", "interview_company_id": company.id},
+        )
+    ).json()
+    assert rec["interview_company_id"] == company.id
+
+    # 关联不存在的公司应 404
+    bad = await client.patch(
+        f"/applications/records/{rec['id']}",
+        headers=_auth(token),
+        json={"interview_company_id": 999999},
+    )
+    assert bad.status_code == 404
+
+    # 解除关联
+    cleared = await client.patch(
+        f"/applications/records/{rec['id']}",
+        headers=_auth(token),
+        json={"interview_company_id": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["interview_company_id"] is None
 
 
 async def test_calendar_crud_and_month_filter(client: AsyncClient) -> None:

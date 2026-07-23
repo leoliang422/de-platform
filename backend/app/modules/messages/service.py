@@ -6,9 +6,20 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.messages.models import ContactMessage
-from app.modules.messages.schemas import ConversationOut
+from app.modules.messages.schemas import ConversationOut, SendMessageIn
 from app.modules.notifications.service import NotificationService
 from app.modules.users.models import User
+
+
+def _preview(msg: ContactMessage) -> str:
+    """会话列表里的最后一条预览文案（附件消息给出占位）。"""
+    if msg.body.strip():
+        return msg.body
+    if msg.attachment_kind == "image":
+        return "[图片]"
+    if msg.attachment_url:
+        return f"[文件] {msg.attachment_name or ''}".strip()
+    return ""
 
 
 class ContactMessageService:
@@ -39,9 +50,15 @@ class ContactMessageService:
         )
         return int(count or 0)
 
-    async def send_from_user(self, user_id: int, body: str) -> ContactMessage:
+    async def send_from_user(self, user_id: int, data: SendMessageIn) -> ContactMessage:
         msg = ContactMessage(
-            user_id=user_id, from_admin=False, sender_id=user_id, body=body.strip()
+            user_id=user_id,
+            from_admin=False,
+            sender_id=user_id,
+            body=data.body.strip(),
+            attachment_url=data.attachment_url,
+            attachment_name=data.attachment_name,
+            attachment_kind=data.attachment_kind,
         )
         self.db.add(msg)
         await self.db.commit()
@@ -82,7 +99,7 @@ class ContactMessageService:
                     user_id=user_id,
                     nickname=user.nickname if user else f"用户#{user_id}",
                     avatar_url=user.avatar_url if user else None,
-                    last_body=last.body,
+                    last_body=_preview(last),
                     last_at=last.created_at,
                     unread=unread_by_user.get(user_id, 0),
                 )
@@ -109,9 +126,17 @@ class ContactMessageService:
         await self._mark_read(user_id, from_admin=False)
         return msgs
 
-    async def send_from_admin(self, user_id: int, admin_id: int, body: str) -> ContactMessage:
+    async def send_from_admin(
+        self, user_id: int, admin_id: int, data: SendMessageIn
+    ) -> ContactMessage:
         msg = ContactMessage(
-            user_id=user_id, from_admin=True, sender_id=admin_id, body=body.strip()
+            user_id=user_id,
+            from_admin=True,
+            sender_id=admin_id,
+            body=data.body.strip(),
+            attachment_url=data.attachment_url,
+            attachment_name=data.attachment_name,
+            attachment_kind=data.attachment_kind,
         )
         self.db.add(msg)
         # 给用户发一条站内通知，提示有管理员回复。
@@ -119,7 +144,7 @@ class ContactMessageService:
             user_id=user_id,
             type="message",
             title="管理员回复了你",
-            body=body.strip()[:80],
+            body=_preview(msg)[:80],
             link="/contact",
         )
         await self.db.commit()

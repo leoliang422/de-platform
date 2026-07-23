@@ -80,6 +80,25 @@ async def test_user_admin_conversation_flow(client: AsyncClient, db: AsyncSessio
     ).json()["unread"] == 0
 
 
+async def test_send_attachment_message(client: AsyncClient) -> None:
+    token = await _token(client, "att@test.io")
+    resp = await client.post(
+        "/messages",
+        headers=_auth(token),
+        json={
+            "body": "",
+            "attachment_url": "http://x/y.png",
+            "attachment_name": "y.png",
+            "attachment_kind": "image",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["attachment_kind"] == "image"
+    # 纯文本且无附件应被拒
+    bad = await client.post("/messages", headers=_auth(token), json={"body": "   "})
+    assert bad.status_code == 422
+
+
 async def test_non_admin_cannot_access_admin_messages(client: AsyncClient) -> None:
     user_token = await _token(client, "plain@test.io")
     assert (
