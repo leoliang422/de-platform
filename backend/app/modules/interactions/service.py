@@ -247,12 +247,21 @@ class InteractionService:
 
     # ---- 划词批注（无需审核、全员可见、可回复/删除） ----
 
-    async def list_annotations(self, ct: str, cid: int) -> list[AnnotationOut]:
+    async def list_annotations(
+        self, ct: str, cid: int, user_id: int | None
+    ) -> list[AnnotationOut]:
         _validate_type(ct)
+        # 批注为「个人笔记」，仅本人可见；未登录返回空。
+        if user_id is None:
+            return []
         stmt = (
             select(Annotation, User)
             .join(User, User.id == Annotation.user_id)
-            .where(Annotation.content_type == ct, Annotation.content_id == cid)
+            .where(
+                Annotation.content_type == ct,
+                Annotation.content_id == cid,
+                Annotation.user_id == user_id,
+            )
             .order_by(Annotation.id.asc())
         )
         rows = (await self.db.execute(stmt)).all()
@@ -285,7 +294,12 @@ class InteractionService:
         parent: Annotation | None = None
         if parent_id is not None:
             parent = await self.db.get(Annotation, parent_id)
-            if parent is None or parent.content_type != ct or parent.content_id != cid:
+            if (
+                parent is None
+                or parent.content_type != ct
+                or parent.content_id != cid
+                or parent.user_id != user.id
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail="回复的批注不存在"
                 )
@@ -299,32 +313,7 @@ class InteractionService:
             body=body,
         )
         self.db.add(annotation)
-        await self.db.flush()
-
-        notifier = NotificationService(self.db)
-        link = _link_for(ct, cid)
-        notified: set[int] = {user.id}
-
-        if parent is not None and parent.user_id not in notified:
-            await notifier.notify(
-                user_id=parent.user_id,
-                type="comment",
-                title="收到批注回复",
-                body=f"{user.nickname} 回复了你的批注：{body[:50]}",
-                link=link,
-            )
-            notified.add(parent.user_id)
-
-        owner_id = await self._owner_of(ct, cid)
-        if owner_id is not None and owner_id not in notified:
-            await notifier.notify(
-                user_id=owner_id,
-                type="comment",
-                title="有人批注了你的内容",
-                body=f"{user.nickname} 批注：{body[:50]}",
-                link=link,
-            )
-
+        # 批注为个人私有笔记，仅本人可见，不产生任何通知。
         await self.db.commit()
         await self.db.refresh(annotation)
         return annotation

@@ -119,9 +119,12 @@ async def delete_comment(
 async def list_annotations(
     content_type: str,
     content_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> list[AnnotationOut]:
-    return await InteractionService(db).list_annotations(content_type, content_id)
+    # 批注为个人私有笔记，仅返回当前登录用户自己的。
+    user_id = current_user.id if current_user else None
+    return await InteractionService(db).list_annotations(content_type, content_id, user_id)
 
 
 @router.post(

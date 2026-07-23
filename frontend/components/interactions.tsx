@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   addView,
@@ -126,7 +126,11 @@ function CommentSection({
   const { user } = useAuth();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [body, setBody] = useState("");
-  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{
+    rootId: number;
+    toId: number;
+    toName: string;
+  } | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -139,6 +143,22 @@ function CommentSection({
   useEffect(() => {
     load();
   }, [load]);
+
+  const byId = useMemo(() => new Map(comments.map((c) => [c.id, c])), [comments]);
+
+  // 找到某条评论所属的顶层楼（沿 parent 向上）——将多级回复折叠为「二级盖楼」。
+  const rootIdOf = useCallback(
+    (c: CommentItem): number => {
+      let cur = c;
+      const seen = new Set<number>();
+      while (cur.parent_id != null && byId.has(cur.parent_id) && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        cur = byId.get(cur.parent_id)!;
+      }
+      return cur.id;
+    },
+    [byId],
+  );
 
   async function submitTop() {
     const token = getAccessToken();
@@ -153,14 +173,17 @@ function CommentSection({
     }
   }
 
-  async function submitReply(parentId: number) {
+  async function submitReply() {
     const token = getAccessToken();
-    if (!token || !replyBody.trim()) return;
+    if (!token || !replyTarget || !replyBody.trim()) return;
     setBusy(true);
     try {
-      await createComment(token, contentType, contentId, replyBody.trim(), parentId);
+      // 回复的是某条「回复」时，@ 对方并挂到同一顶层楼下（二级盖楼，避免无限嵌套）。
+      const nested = replyTarget.toId !== replyTarget.rootId;
+      const text = nested ? `@${replyTarget.toName} ${replyBody.trim()}` : replyBody.trim();
+      await createComment(token, contentType, contentId, text, replyTarget.rootId);
       setReplyBody("");
-      setReplyTo(null);
+      setReplyTarget(null);
       load();
     } finally {
       setBusy(false);
@@ -175,8 +198,54 @@ function CommentSection({
     load();
   }
 
-  const tops = comments.filter((c) => c.parent_id == null);
-  const repliesOf = (id: number) => comments.filter((c) => c.parent_id === id);
+  const tops = comments
+    .filter((c) => c.parent_id == null)
+    .sort((a, b) => a.id - b.id);
+  const repliesOfRoot = (rootId: number) =>
+    comments
+      .filter((c) => c.parent_id != null && rootIdOf(c) === rootId)
+      .sort((a, b) => a.id - b.id);
+
+  // 用普通函数返回 JSX 并「就地调用」（而非作为组件渲染），避免输入时子组件重挂载导致失焦。
+  const replyButton = (target: CommentItem) => {
+    if (!user) return null;
+    const open = replyTarget?.toId === target.id;
+    return (
+      <button
+        onClick={() => {
+          setReplyTarget(
+            open
+              ? null
+              : { rootId: rootIdOf(target), toId: target.id, toName: target.author_nickname },
+          );
+          setReplyBody("");
+        }}
+        className="mt-1 text-xs text-brand-600 hover:underline"
+      >
+        {open ? "取消" : "回复"}
+      </button>
+    );
+  };
+
+  const replyComposer = () =>
+    replyTarget == null ? null : (
+      <div className="mt-2">
+        <textarea
+          value={replyBody}
+          onChange={(e) => setReplyBody(e.target.value)}
+          rows={2}
+          placeholder={`回复 ${replyTarget.toName}…`}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+        />
+        <button
+          onClick={submitReply}
+          disabled={busy || !replyBody.trim()}
+          className="mt-1 rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          发送
+        </button>
+      </div>
+    );
 
   return (
     <div className="mt-6">
@@ -212,54 +281,36 @@ function CommentSection({
         <p className="text-sm text-slate-400">还没有评论，来做第一个。</p>
       ) : (
         <div className="space-y-4">
-          {tops.map((c) => (
-            <div key={c.id} className="rounded-lg border border-slate-200 bg-white p-3">
-              <CommentRow comment={c} canDelete={user?.id === c.user_id || user?.role === "admin"} onDelete={remove} />
-              {user && (
-                <button
-                  onClick={() => {
-                    setReplyTo(replyTo === c.id ? null : c.id);
-                    setReplyBody("");
-                  }}
-                  className="mt-1 text-xs text-brand-600 hover:underline"
-                >
-                  {replyTo === c.id ? "取消" : "回复"}
-                </button>
-              )}
+          {tops.map((c) => {
+            const replies = repliesOfRoot(c.id);
+            return (
+              <div key={c.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                <CommentRow
+                  comment={c}
+                  canDelete={user?.id === c.user_id || user?.role === "admin"}
+                  onDelete={remove}
+                />
+                {replyButton(c)}
+                {replyTarget?.toId === c.id && replyComposer()}
 
-              {replyTo === c.id && (
-                <div className="mt-2">
-                  <textarea
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    rows={2}
-                    placeholder={`回复 ${c.author_nickname}…`}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => submitReply(c.id)}
-                    disabled={busy || !replyBody.trim()}
-                    className="mt-1 rounded-lg bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    发送
-                  </button>
-                </div>
-              )}
-
-              {repliesOf(c.id).length > 0 && (
-                <div className="mt-3 space-y-2 border-l-2 border-slate-100 pl-3">
-                  {repliesOf(c.id).map((r) => (
-                    <CommentRow
-                      key={r.id}
-                      comment={r}
-                      canDelete={user?.id === r.user_id || user?.role === "admin"}
-                      onDelete={remove}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                {replies.length > 0 && (
+                  <div className="mt-3 space-y-3 border-l-2 border-slate-100 pl-3">
+                    {replies.map((r) => (
+                      <div key={r.id}>
+                        <CommentRow
+                          comment={r}
+                          canDelete={user?.id === r.user_id || user?.role === "admin"}
+                          onDelete={remove}
+                        />
+                        {replyButton(r)}
+                        {replyTarget?.toId === r.id && replyComposer()}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -340,7 +391,7 @@ export function AnnotatedReader({
   const [activeId, setActiveId] = useState<number | null>(null);
 
   const load = useCallback(() => {
-    getAnnotations(contentType, contentId)
+    getAnnotations(contentType, contentId, getAccessToken())
       .then(setNotes)
       .catch(() => setNotes([]));
   }, [contentType, contentId]);
@@ -530,8 +581,8 @@ function AnnotationSidebar({
   return (
     <aside className="lg:sticky lg:top-4 lg:h-fit">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-base font-semibold text-slate-900">批注 ({tops.length})</h3>
-        <p className="mb-3 mt-0.5 text-xs text-slate-400">选中正文文字即可加注，全员可见、即时生效。</p>
+        <h3 className="text-base font-semibold text-slate-900">我的批注 ({tops.length})</h3>
+        <p className="mb-3 mt-0.5 text-xs text-slate-400">选中正文文字即可加注，仅自己可见、即时生效。</p>
 
         {user ? (
           <div id="annotation-composer" className="mb-4">
@@ -572,7 +623,7 @@ function AnnotationSidebar({
         )}
 
         {tops.length === 0 ? (
-          <p className="text-sm text-slate-400">还没有批注。选中正文试试。</p>
+          <p className="text-sm text-slate-400">还没有批注（仅自己可见）。选中正文试试。</p>
         ) : (
           <div className="space-y-3">
             {tops.map((n) => (

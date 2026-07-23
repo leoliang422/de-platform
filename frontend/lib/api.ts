@@ -241,8 +241,11 @@ export interface AnnotationItem {
 export function getAnnotations(
   ct: InteractionContentType,
   id: number,
+  token?: string | null,
 ): Promise<AnnotationItem[]> {
-  return request<AnnotationItem[]>(`/interactions/${ct}/${id}/annotations`);
+  // 批注为个人私有笔记，需带 token 才能取到自己的；未登录返回空数组。
+  if (!token) return Promise.resolve([]);
+  return authRequest<AnnotationItem[]>(`/interactions/${ct}/${id}/annotations`, token);
 }
 
 export function createAnnotation(

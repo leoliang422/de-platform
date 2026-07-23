@@ -34,7 +34,7 @@ async def _make_knowledge(db: AsyncSession, title: str = "批注知识") -> int:
     return item.id
 
 
-async def test_annotation_create_and_list_public(client: AsyncClient, db: AsyncSession) -> None:
+async def test_annotation_is_private_to_author(client: AsyncClient, db: AsyncSession) -> None:
     kid = await _make_knowledge(db)
     token = await _login(client, "anno1@test.io")
 
@@ -48,14 +48,26 @@ async def test_annotation_create_and_list_public(client: AsyncClient, db: AsyncS
     assert body["quote"] == "SQL 转 MapReduce"
     assert body["anchor_offset"] == 12
 
-    # 无需登录即可查看（全员可见）
-    listing = await client.get(f"/interactions/knowledge/{kid}/annotations")
-    assert listing.status_code == 200
-    assert len(listing.json()) == 1
-    assert listing.json()[0]["body"] == "这里其实也可以走 Tez"
+    # 作者本人可见
+    mine = await client.get(f"/interactions/knowledge/{kid}/annotations", headers=_auth(token))
+    assert mine.status_code == 200
+    assert len(mine.json()) == 1
+    assert mine.json()[0]["body"] == "这里其实也可以走 Tez"
+
+    # 未登录不可见（个人私有笔记）
+    anon = await client.get(f"/interactions/knowledge/{kid}/annotations")
+    assert anon.status_code == 200
+    assert anon.json() == []
+
+    # 其他用户不可见
+    other = await _login(client, "annoOther@test.io")
+    other_view = await client.get(
+        f"/interactions/knowledge/{kid}/annotations", headers=_auth(other)
+    )
+    assert other_view.json() == []
 
 
-async def test_annotation_reply_notifies_and_clears_anchor(
+async def test_annotation_reply_self_only_and_clears_anchor(
     client: AsyncClient, db: AsyncSession
 ) -> None:
     kid = await _make_knowledge(db)
@@ -69,19 +81,28 @@ async def test_annotation_reply_notifies_and_clears_anchor(
     )
     top_id = top.json()["id"]
 
+    # 自己回复自己的批注：成功，且不携带锚点
     reply = await client.post(
         f"/interactions/knowledge/{kid}/annotations",
-        headers=_auth(bob),
-        json={"body": "回复批注", "parent_id": top_id, "quote": "忽略", "anchor_offset": 99},
+        headers=_auth(alice),
+        json={"body": "补充一下", "parent_id": top_id, "quote": "忽略", "anchor_offset": 99},
     )
     assert reply.status_code == 201
     assert reply.json()["parent_id"] == top_id
-    # 回复不携带锚点
     assert reply.json()["quote"] == ""
     assert reply.json()["anchor_offset"] == 0
 
+    # 他人无法回复（也看不到）别人的私有批注
+    bad = await client.post(
+        f"/interactions/knowledge/{kid}/annotations",
+        headers=_auth(bob),
+        json={"body": "越权回复", "parent_id": top_id},
+    )
+    assert bad.status_code == 400
+
+    # 批注为私有笔记，不再给内容作者/父批注作者发通知
     notifs = await client.get("/notifications", headers=_auth(alice))
-    assert any(n["type"] == "comment" for n in notifs.json())
+    assert all(n["type"] != "comment" for n in notifs.json())
 
 
 async def test_annotation_reply_requires_valid_parent(
