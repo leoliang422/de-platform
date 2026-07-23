@@ -61,84 +61,102 @@ export default function SqlPage() {
     <div>
       <PageHeader title="SQL 题库" desc="数据开发高频 SQL 题目：问题 · 求解思路 · Hive SQL" />
 
-      <div className="mb-4">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1); // 搜索时回到第一页
-          }}
-          placeholder="搜索题目标题…"
-          className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-        />
-      </div>
-
-      {tabs.length > 0 && (
-        <div className="mb-5 flex flex-wrap gap-2">
-          <FilterChip active={activeCat === null} onClick={() => setActiveCat(null)}>
-            全部
-          </FilterChip>
-          {tabs.map((c) => (
-            <FilterChip
-              key={c.id}
-              active={activeCat === c.id}
-              onClick={() => setActiveCat(c.id)}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_1fr]">
+        <aside className="text-sm md:sticky md:top-20 md:self-start">
+          <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            题型
+          </p>
+          <div className="space-y-0.5">
+            <button
+              onClick={() => setActiveCat(null)}
+              className={`block w-full rounded px-2 py-1.5 text-left ${
+                activeCat === null
+                  ? "bg-brand-50 font-medium text-brand-700"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
             >
-              {c.name}
-            </FilterChip>
-          ))}
-        </div>
-      )}
-
-      {loading ? (
-        <Loading />
-      ) : error ? (
-        <ErrorText message={error} />
-      ) : items.length === 0 ? (
-        <Empty message="该题型下暂无题目" />
-      ) : filtered.length === 0 ? (
-        <Empty message={`没有匹配「${query.trim()}」的题目`} />
-      ) : (
-        <>
-          <div className="space-y-3">
-            {pageItems.map((q) => (
-              <ListCard key={q.id} href={`/sql/${q.id}`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-900">{q.title}</span>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      DIFF_COLOR[q.difficulty] ?? "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {q.difficulty}
-                  </span>
-                </div>
-                {q.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {q.tags.map((t) => (
-                      <span
-                        key={t}
-                        className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </ListCard>
+              全部题目
+            </button>
+            {tabs.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setActiveCat(c.id)}
+                className={`block w-full rounded px-2 py-1.5 text-left ${
+                  activeCat === c.id
+                    ? "bg-brand-50 font-medium text-brand-700"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {c.name}
+              </button>
             ))}
           </div>
+        </aside>
 
-          <Pagination
-            page={currentPage}
-            totalPages={totalPages}
-            total={items.length}
-            onPrev={() => setPage((p) => Math.max(1, p - 1))}
-            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-          />
-        </>
-      )}
+        <section>
+          <div className="mb-4">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1); // 搜索时回到第一页
+              }}
+              placeholder="搜索题目标题…"
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </div>
+
+          {loading ? (
+            <Loading />
+          ) : error ? (
+            <ErrorText message={error} />
+          ) : items.length === 0 ? (
+            <Empty message="该题型下暂无题目" />
+          ) : filtered.length === 0 ? (
+            <Empty message={`没有匹配「${query.trim()}」的题目`} />
+          ) : (
+            <>
+              <div className="space-y-3">
+                {pageItems.map((q) => (
+                  <ListCard key={q.id} href={`/sql/${q.id}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-900">{q.title}</span>
+                      <span
+                        className={`rounded px-2 py-0.5 text-xs ${
+                          DIFF_COLOR[q.difficulty] ?? "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {q.difficulty}
+                      </span>
+                    </div>
+                    {q.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {q.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </ListCard>
+                ))}
+              </div>
+
+              <Pagination
+                page={currentPage}
+                totalPages={totalPages}
+                total={items.length}
+                onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              />
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -177,28 +195,5 @@ function Pagination({
         下一页
       </button>
     </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-        active
-          ? "bg-brand-600 text-white"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
