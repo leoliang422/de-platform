@@ -67,7 +67,13 @@ function MeInner() {
           {user?.job_title && <div className="text-sm text-slate-500">{user.job_title}</div>}
           {user?.bio && <div className="mt-1 text-sm text-slate-600">{user.bio}</div>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/me/applications"
+            className="rounded-lg border border-brand-500 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
+          >
+            投递记录
+          </Link>
           <Link
             href="/me/favorites"
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"

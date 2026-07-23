@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.modules.access.router import router as access_router
 from app.modules.admin.content_router import router as admin_content_router
 from app.modules.admin.router import router as admin_router
+from app.modules.applications.router import router as applications_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.files.router import router as files_router
@@ -82,6 +83,7 @@ app.include_router(submissions_router)
 app.include_router(notifications_router)
 app.include_router(interactions_router)
 app.include_router(access_router)
+app.include_router(applications_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(admin_content_router)

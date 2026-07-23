@@ -1142,3 +1142,149 @@ export function adminDeleteContent(
     method: "DELETE",
   });
 }
+
+// ---- Applications（投递记录管理） ----
+export type CompanyNature = "state" | "private" | "foreign" | "other";
+export type ApplicationStatus =
+  | "applied"
+  | "round1"
+  | "round1_fail"
+  | "round2"
+  | "round2_fail"
+  | "round3"
+  | "round3_fail"
+  | "hr"
+  | "hr_fail"
+  | "rejected"
+  | "offer";
+
+export const COMPANY_NATURE_LABEL: Record<string, string> = {
+  state: "国央企",
+  private: "私企",
+  foreign: "外企",
+  other: "其他",
+};
+
+export const APPLICATION_STATUS_LABEL: Record<string, string> = {
+  applied: "已投递",
+  round1: "一面中",
+  round1_fail: "一面挂",
+  round2: "二面中",
+  round2_fail: "二面挂",
+  round3: "三面中",
+  round3_fail: "三面挂",
+  hr: "HR面中",
+  hr_fail: "HR面挂",
+  rejected: "已拒",
+  offer: "Offer",
+};
+
+export interface ApplicationRecord {
+  id: number;
+  list_id: number;
+  company_name: string;
+  nature: CompanyNature | null;
+  position: string;
+  applied_date: string | null;
+  status: ApplicationStatus;
+  order_index: number;
+}
+
+export interface ApplicationList {
+  id: number;
+  name: string;
+  order_index: number;
+  records: ApplicationRecord[];
+}
+
+export interface CalendarEvent {
+  id: number;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  note: string | null;
+  color: string | null;
+}
+
+export function getApplicationLists(token: string): Promise<ApplicationList[]> {
+  return authRequest<ApplicationList[]>("/applications/lists", token);
+}
+
+export function createApplicationList(token: string, name: string): Promise<ApplicationList> {
+  return authRequest<ApplicationList>("/applications/lists", token, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function renameApplicationList(
+  token: string,
+  listId: number,
+  name: string,
+): Promise<ApplicationList> {
+  return authRequest<ApplicationList>(`/applications/lists/${listId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteApplicationList(token: string, listId: number): Promise<void> {
+  return authRequest<void>(`/applications/lists/${listId}`, token, { method: "DELETE" });
+}
+
+export function addApplicationRecord(
+  token: string,
+  listId: number,
+  input: Partial<Omit<ApplicationRecord, "id" | "list_id" | "order_index">>,
+): Promise<ApplicationRecord> {
+  return authRequest<ApplicationRecord>(`/applications/lists/${listId}/records`, token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateApplicationRecord(
+  token: string,
+  recordId: number,
+  input: Partial<Omit<ApplicationRecord, "id" | "list_id" | "order_index">>,
+): Promise<ApplicationRecord> {
+  return authRequest<ApplicationRecord>(`/applications/records/${recordId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteApplicationRecord(token: string, recordId: number): Promise<void> {
+  return authRequest<void>(`/applications/records/${recordId}`, token, { method: "DELETE" });
+}
+
+export function getCalendarEvents(token: string, month?: string): Promise<CalendarEvent[]> {
+  const q = month ? `?month=${encodeURIComponent(month)}` : "";
+  return authRequest<CalendarEvent[]>(`/applications/calendar${q}`, token);
+}
+
+export function createCalendarEvent(
+  token: string,
+  input: Omit<CalendarEvent, "id">,
+): Promise<CalendarEvent> {
+  return authRequest<CalendarEvent>("/applications/calendar", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCalendarEvent(
+  token: string,
+  eventId: number,
+  input: Partial<Omit<CalendarEvent, "id">>,
+): Promise<CalendarEvent> {
+  return authRequest<CalendarEvent>(`/applications/calendar/${eventId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteCalendarEvent(token: string, eventId: number): Promise<void> {
+  return authRequest<void>(`/applications/calendar/${eventId}`, token, { method: "DELETE" });
+}
