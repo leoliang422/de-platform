@@ -33,6 +33,10 @@ _CONTENT_PATH = {
 }
 
 
+# 私有笔记类型：这些内容的批注视为「个人私有笔记」，仅本人可见、免审核。
+PRIVATE_NOTE_TYPES = ("sql",)
+
+
 def _validate_type(content_type: str) -> None:
     if content_type not in CONTENT_TYPES:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="内容类型不存在")
@@ -247,7 +251,9 @@ class InteractionService:
 
     # ---- 划词批注（无需审核、全员可见、可回复/删除） ----
 
-    async def list_annotations(self, ct: str, cid: int) -> list[AnnotationOut]:
+    async def list_annotations(
+        self, ct: str, cid: int, viewer_id: int | None = None
+    ) -> list[AnnotationOut]:
         _validate_type(ct)
         stmt = (
             select(Annotation, User)
@@ -255,6 +261,11 @@ class InteractionService:
             .where(Annotation.content_type == ct, Annotation.content_id == cid)
             .order_by(Annotation.id.asc())
         )
+        # 私有笔记类型（如 SQL）：仅返回本人的笔记；未登录则为空。
+        if ct in PRIVATE_NOTE_TYPES:
+            if viewer_id is None:
+                return []
+            stmt = stmt.where(Annotation.user_id == viewer_id)
         rows = (await self.db.execute(stmt)).all()
         return [
             AnnotationOut(

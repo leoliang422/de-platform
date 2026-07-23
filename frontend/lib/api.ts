@@ -241,8 +241,10 @@ export interface AnnotationItem {
 export function getAnnotations(
   ct: InteractionContentType,
   id: number,
+  token?: string | null,
 ): Promise<AnnotationItem[]> {
-  return request<AnnotationItem[]>(`/interactions/${ct}/${id}/annotations`);
+  // 私有笔记类型（如 SQL）需要带 token，后端据此只返回本人的笔记。
+  return request<AnnotationItem[]>(`/interactions/${ct}/${id}/annotations`, maybeAuth(token));
 }
 
 export function createAnnotation(

@@ -119,9 +119,12 @@ async def delete_comment(
 async def list_annotations(
     content_type: str,
     content_id: int,
+    viewer: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> list[AnnotationOut]:
-    return await InteractionService(db).list_annotations(content_type, content_id)
+    return await InteractionService(db).list_annotations(
+        content_type, content_id, viewer.id if viewer else None
+    )
 
 
 @router.post(

@@ -327,11 +327,14 @@ export function AnnotatedReader({
   contentType,
   contentId,
   disabled = false,
+  privateNote = false,
   children,
 }: {
   contentType: InteractionContentType;
   contentId: number;
   disabled?: boolean;
+  /** 私有笔记模式：仅本人可见（后端按登录用户过滤），文案改为「我的笔记」。 */
+  privateNote?: boolean;
   children: React.ReactNode;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -340,7 +343,8 @@ export function AnnotatedReader({
   const [activeId, setActiveId] = useState<number | null>(null);
 
   const load = useCallback(() => {
-    getAnnotations(contentType, contentId)
+    // 私有笔记需带 token，后端据此只返回本人的笔记。
+    getAnnotations(contentType, contentId, getAccessToken())
       .then(setNotes)
       .catch(() => setNotes([]));
   }, [contentType, contentId]);
@@ -439,6 +443,7 @@ export function AnnotatedReader({
         onChanged={load}
         activeId={activeId}
         onActivate={setActiveId}
+        privateNote={privateNote}
       />
       {pending && (
         <button
@@ -451,7 +456,7 @@ export function AnnotatedReader({
           style={{ left: pending.x, top: pending.y }}
           className="fixed z-50 -translate-x-1/2 -translate-y-full rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white shadow-lg hover:bg-brand-700"
         >
-          ✎ 添加批注
+          ✎ {privateNote ? "记笔记" : "添加批注"}
         </button>
       )}
     </div>
@@ -467,6 +472,7 @@ function AnnotationSidebar({
   onChanged,
   activeId,
   onActivate,
+  privateNote = false,
 }: {
   contentType: InteractionContentType;
   contentId: number;
@@ -476,6 +482,7 @@ function AnnotationSidebar({
   onChanged: () => void;
   activeId: number | null;
   onActivate: (id: number | null) => void;
+  privateNote?: boolean;
 }) {
   const { user } = useAuth();
   const [body, setBody] = useState("");
@@ -530,8 +537,14 @@ function AnnotationSidebar({
   return (
     <aside className="lg:sticky lg:top-4 lg:h-fit">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-base font-semibold text-slate-900">批注 ({tops.length})</h3>
-        <p className="mb-3 mt-0.5 text-xs text-slate-400">选中正文文字即可加注，全员可见、即时生效。</p>
+        <h3 className="text-base font-semibold text-slate-900">
+          {privateNote ? "我的笔记" : "批注"} ({tops.length})
+        </h3>
+        <p className="mb-3 mt-0.5 text-xs text-slate-400">
+          {privateNote
+            ? "选中正文文字即可记笔记，仅自己可见、即时生效。"
+            : "选中正文文字即可加注，全员可见、即时生效。"}
+        </p>
 
         {user ? (
           <div id="annotation-composer" className="mb-4">
@@ -551,7 +564,13 @@ function AnnotationSidebar({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
-              placeholder={pending?.quote ? "对选中文字的补充说明…" : "写一条批注（可先在正文中选词）…"}
+              placeholder={
+                pending?.quote
+                  ? "对选中文字的补充说明…"
+                  : privateNote
+                    ? "写一条笔记（可先在正文中选词）…"
+                    : "写一条批注（可先在正文中选词）…"
+              }
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
             <button
@@ -559,7 +578,7 @@ function AnnotationSidebar({
               disabled={busy || !body.trim()}
               className="mt-2 w-full rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              提交批注
+              {privateNote ? "保存笔记" : "提交批注"}
             </button>
           </div>
         ) : (
@@ -567,12 +586,14 @@ function AnnotationSidebar({
             <Link href="/login" className="text-brand-600 hover:underline">
               登录
             </Link>
-            后可添加批注。
+            后可{privateNote ? "记笔记" : "添加批注"}。
           </p>
         )}
 
         {tops.length === 0 ? (
-          <p className="text-sm text-slate-400">还没有批注。选中正文试试。</p>
+          <p className="text-sm text-slate-400">
+            还没有{privateNote ? "笔记" : "批注"}。选中正文试试。
+          </p>
         ) : (
           <div className="space-y-3">
             {tops.map((n) => (

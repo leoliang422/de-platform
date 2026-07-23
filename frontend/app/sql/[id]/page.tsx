@@ -76,7 +76,7 @@ export default function SqlDetailPage({
       ) : !item ? (
         <Loading />
       ) : (
-        <AnnotatedReader contentType="sql" contentId={item.id}>
+        <AnnotatedReader contentType="sql" contentId={item.id} privateNote>
           {/* 标题区 */}
           <header className="mb-6 border-b border-slate-200 pb-4">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">{item.title}</h1>
