@@ -191,6 +191,7 @@ function SubmitInner() {
   const [targetType, setTargetType] = useState<TargetType>("knowledge");
   const [title, setTitle] = useState("");
   const [raw, setRaw] = useState("");
+  const [promptMd, setPromptMd] = useState("");
   const [completingMain, setCompletingMain] = useState(false);
   const [difficulty, setDifficulty] = useState("medium");
   const [tags, setTags] = useState("");
@@ -454,13 +455,14 @@ function SubmitInner() {
     }
   }
 
-  // 八股 / SQL 人工单独上传：用标题作为问题，让大模型生成正文/解答。
+  // 八股 / SQL 人工单独上传：以问题为输入让大模型生成正文/解答。
+  // 八股用标题作为问题；SQL 用题目（题干）作为问题。
   async function completeMainAnswer() {
     const token = getAccessToken();
     if (!token) return;
-    const question = title.trim();
+    const question = (targetType === "sql" ? promptMd : title).trim();
     if (!question) {
-      setError("请先填写标题，再用它作为问题生成答案");
+      setError(targetType === "sql" ? "请先填写题目，再生成解答" : "请先填写标题，再用它作为问题生成答案");
       return;
     }
     setCompletingMain(true);
@@ -529,8 +531,7 @@ function SubmitInner() {
       // 面经无标题/无整体感受：标题回落为企业名，正文置空
       title: targetType === "interview" ? companyName : title,
       raw_content: targetType === "interview" ? "" : raw,
-      // SQL 已合并「题目」到「标题」：标题即题干。
-      prompt_md: targetType === "sql" ? title : undefined,
+      prompt_md: targetType === "sql" ? promptMd : undefined,
       difficulty: targetType === "sql" ? difficulty : undefined,
       tags: targetType === "sql" ? tags : undefined,
       company_name: targetType === "interview" ? companyName : undefined,
@@ -567,6 +568,7 @@ function SubmitInner() {
       );
       setTitle("");
       setRaw("");
+      setPromptMd("");
       setImplementation("");
       setPosition("");
       setQaGroups(defaultQaGroups());
@@ -784,30 +786,36 @@ function SubmitInner() {
 
         {targetType !== "interview" && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              {targetType === "sql" ? "标题 / 题目" : "标题"}
-            </label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">标题</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               placeholder={
                 targetType === "sql"
-                  ? "简明描述题目，如：连续登录 N 天的用户"
+                  ? "题目简称，如：连续登录 N 天的用户"
                   : targetType === "knowledge"
                     ? "知识点，如：Hive 内部表与外部表的区别"
                     : undefined
               }
               className={inputCls}
             />
-            {targetType === "sql" && (
-              <p className="mt-1 text-xs text-slate-400">标题即题目描述，无需再单独填写题干。</p>
-            )}
           </div>
         )}
 
         {targetType === "sql" && (
           <>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">题目</label>
+              <textarea
+                value={promptMd}
+                onChange={(e) => setPromptMd(e.target.value)}
+                rows={3}
+                required
+                placeholder="完整题目描述（含示例表 / 输入输出说明）"
+                className={inputCls}
+              />
+            </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-slate-700">难度</label>
@@ -1035,7 +1043,7 @@ function SubmitInner() {
             <MarkdownTextarea value={raw} onChange={setRaw} rows={6} required className={inputCls} />
             <p className="mt-1 text-xs text-slate-400">
               {targetType === "sql"
-                ? "可先填标题，点「AI 生成答案」由大模型生成解题思路与 SQL，再人工确认。"
+                ? "可先填题目，点「AI 生成答案」由大模型生成解题思路与 SQL，再人工确认。"
                 : "可先填标题，点「AI 生成答案」由大模型生成讲解，再人工确认。"}
             </p>
           </div>
