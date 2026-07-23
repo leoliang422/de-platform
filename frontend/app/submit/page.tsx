@@ -882,8 +882,8 @@ function SubmitInner() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="mb-3 text-sm font-medium text-slate-700">
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">
                 面试问答（每个轮次只需选择一次，下面依次填写该轮的问题与答案）
               </p>
               <div className="space-y-4">
@@ -963,15 +963,6 @@ function SubmitInner() {
                     </button>
                   </div>
                 ))}
-              </div>
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={addRound}
-                  className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50"
-                >
-                  + 添加一个轮次
-                </button>
               </div>
             </div>
           </div>
@@ -1060,13 +1051,24 @@ function SubmitInner() {
         {error && <p className="text-sm text-red-600">{error}</p>}
         {message && <p className="text-sm text-green-600">{message}</p>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-        >
-          {submitting ? "提交中…" : "提交投稿"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {targetType === "interview" && (
+            <button
+              type="button"
+              onClick={addRound}
+              className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50"
+            >
+              + 添加一个轮次
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {submitting ? "提交中…" : "提交投稿"}
+          </button>
+        </div>
       </form>
 
       <div className="mb-3 mt-8 flex items-center justify-between">
