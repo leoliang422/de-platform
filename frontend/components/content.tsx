@@ -1,55 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-// SQL 关键字（大写匹配，忽略大小写）——用于代码块语法高亮。
-const SQL_KEYWORDS = new Set([
-  "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "NULL", "AS", "ON", "IN", "IS",
-  "LIKE", "BETWEEN", "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET", "JOIN",
-  "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS", "UNION", "ALL", "DISTINCT",
-  "CASE", "WHEN", "THEN", "ELSE", "END", "OVER", "PARTITION", "ROWS", "RANGE",
-  "PRECEDING", "FOLLOWING", "CURRENT", "ROW", "UNBOUNDED", "WITH", "INSERT", "INTO",
-  "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "TABLE", "VIEW", "DROP", "ALTER",
-  "DESC", "ASC", "EXISTS", "IF", "USING", "OVERWRITE", "LATERAL", "EXPLODE", "TRUE",
-  "FALSE", "INTERVAL", "CAST", "DATE",
-]);
-
-// 轻量 SQL 语法高亮：把代码切成 注释/字符串/数字/关键字/函数/标点，分色渲染。无外部依赖。
-function highlightSql(code: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  const re =
-    /(--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^'\\]|\\.)*')|(`[^`]*`)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([\s\S])/g;
-  let m: RegExpExecArray | null;
-  let k = 0;
-  while ((m = re.exec(code)) !== null) {
-    const key = `sql-${k++}`;
-    if (m[1] !== undefined) {
-      out.push(<span key={key} className="italic text-slate-500">{m[1]}</span>);
-    } else if (m[2] !== undefined || m[3] !== undefined) {
-      out.push(<span key={key} className="text-emerald-300">{m[2] ?? m[3]}</span>);
-    } else if (m[4] !== undefined) {
-      out.push(<span key={key} className="text-amber-300">{m[4]}</span>);
-    } else if (m[5] !== undefined) {
-      const word = m[5];
-      if (SQL_KEYWORDS.has(word.toUpperCase())) {
-        out.push(<span key={key} className="font-medium text-sky-400">{word}</span>);
-      } else {
-        // 后接 "(" 视为函数名
-        let j = re.lastIndex;
-        while (j < code.length && /\s/.test(code[j])) j++;
-        if (code[j] === "(") {
-          out.push(<span key={key} className="text-violet-300">{word}</span>);
-        } else {
-          out.push(word);
-        }
-      }
-    } else if (m[6] !== undefined) {
-      out.push(m[6]); // 空白原样
-    } else {
-      out.push(<span key={key} className="text-slate-400">{m[7]}</span>); // 标点/运算符
-    }
-  }
-  return out;
-}
+import { CodeBlock } from "@/components/code-block";
 
 // 行内语法：图片 / 链接 / 加粗 / 行内代码，按出现顺序切分。
 const INLINE_RE =
@@ -153,21 +105,7 @@ function renderMarkdown(md: string): ReactNode[] {
       }
       i++;
       const codeText = buf.join("\n");
-      const isSql = lang === "sql";
-      blocks.push(
-        <div key={`c-${key++}`} className="my-3 overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
-          {lang && (
-            <div className="flex items-center justify-between border-b border-slate-700/60 px-3 py-1.5">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                {lang}
-              </span>
-            </div>
-          )}
-          <pre className="overflow-auto p-3 text-xs leading-relaxed text-slate-100">
-            <code>{isSql ? highlightSql(codeText) : codeText}</code>
-          </pre>
-        </div>,
-      );
+      blocks.push(<CodeBlock key={`c-${key++}`} code={codeText} lang={lang} />);
       continue;
     }
 

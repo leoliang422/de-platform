@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
 import { ContentInteractions, PersonalNotes } from "@/components/interactions";
@@ -12,8 +12,10 @@ import {
   ApiError,
   getAccessToken,
   getSqlDetail,
+  getSqlList,
   revealSqlAnswer,
   type SqlDetail,
+  type SqlListItem,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -29,6 +31,10 @@ export default function SqlDetailPage({
   const [showAnswer, setShowAnswer] = useState(false);
   const [busy, setBusy] = useState(false);
   const [revealError, setRevealError] = useState<string | null>(null);
+  const [nav, setNav] = useState<{ prev: SqlListItem | null; next: SqlListItem | null }>({
+    prev: null,
+    next: null,
+  });
 
   const load = useCallback(() => {
     getSqlDetail(Number(id), getAccessToken())
@@ -39,6 +45,21 @@ export default function SqlDetailPage({
   useEffect(() => {
     load();
   }, [load]);
+
+  // 同题型内的上一题/下一题（列表按 id 倒序）。
+  useEffect(() => {
+    if (!item) return;
+    getSqlList(item.category_id ?? undefined)
+      .then((list) => {
+        const idx = list.findIndex((x) => x.id === item.id);
+        if (idx === -1) {
+          setNav({ prev: null, next: null });
+          return;
+        }
+        setNav({ prev: list[idx - 1] ?? null, next: list[idx + 1] ?? null });
+      })
+      .catch(() => setNav({ prev: null, next: null }));
+  }, [item?.id, item?.category_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const answerReady = !!item && item.answer_md != null && !item.answer_locked;
   const quotaExhausted =
@@ -107,8 +128,14 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 题目描述（含示例表与数据）——正文已含「## 题目描述」标题 */}
-              <Prose>{item.prompt_md}</Prose>
+              {/* 题目描述：难度色条 + 卡片 */}
+              <div
+                className={`overflow-hidden rounded-lg border-l-4 ${
+                  DIFF_BAR[item.difficulty] ?? "border-slate-300"
+                }`}
+              >
+                <Prose>{item.prompt_md}</Prose>
+              </div>
 
               {/* 求解思路 / 求解 SQL —— 门控展示 */}
               <div className="mt-3 mb-3">
@@ -147,7 +174,7 @@ export default function SqlDetailPage({
                 />
               )}
 
-              {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
+              {answerReady && showAnswer && <AnswerTabs md={item.answer_md ?? ""} />}
 
               {PLAYGROUND_FIXTURES[item.title] && (
                 <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
@@ -158,6 +185,37 @@ export default function SqlDetailPage({
               <PersonalNotes contentType="sql" contentId={item.id} />
             </div>
           </div>
+
+          {(nav.prev || nav.next) && (
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+              {nav.prev ? (
+                <Link
+                  href={`/sql/${nav.prev.id}`}
+                  className="group rounded-lg border border-slate-200 p-3 transition hover:border-brand-400 hover:bg-slate-50"
+                >
+                  <div className="text-xs text-slate-400">← 上一题</div>
+                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
+                    {nav.prev.title}
+                  </div>
+                </Link>
+              ) : (
+                <span />
+              )}
+              {nav.next ? (
+                <Link
+                  href={`/sql/${nav.next.id}`}
+                  className="group rounded-lg border border-slate-200 p-3 text-right transition hover:border-brand-400 hover:bg-slate-50"
+                >
+                  <div className="text-xs text-slate-400">下一题 →</div>
+                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
+                    {nav.next.title}
+                  </div>
+                </Link>
+              ) : (
+                <span />
+              )}
+            </div>
+          )}
 
           <ContentInteractions contentType="sql" contentId={item.id} />
         </>
@@ -171,3 +229,53 @@ const DIFFICULTY: Record<string, { label: string; cls: string }> = {
   medium: { label: "中等", cls: "bg-amber-100 text-amber-700" },
   hard: { label: "困难", cls: "bg-red-100 text-red-700" },
 };
+
+const DIFF_BAR: Record<string, string> = {
+  easy: "border-green-400",
+  medium: "border-amber-400",
+  hard: "border-red-400",
+};
+
+// 把答案 Markdown 拆成「求解思路」与「求解 SQL」两段（去掉各自的 ## 标题行）。
+function splitAnswer(md: string): { idea: string; sql: string } {
+  const marker = md.indexOf("## 求解 SQL");
+  if (marker === -1) return { idea: md.replace(/^##\s*求解思路\s*\n?/, "").trim(), sql: "" };
+  const idea = md
+    .slice(0, marker)
+    .replace(/^##\s*求解思路\s*\n?/, "")
+    .trim();
+  const sql = md
+    .slice(marker)
+    .replace(/^##[^\n]*\n?/, "")
+    .trim();
+  return { idea, sql };
+}
+
+// 解答区：求解思路 / 求解 SQL 分标签页切换。
+function AnswerTabs({ md }: { md: string }) {
+  const { idea, sql } = useMemo(() => splitAnswer(md), [md]);
+  const [tab, setTab] = useState<"idea" | "sql">("idea");
+
+  if (!sql) return <Prose>{md}</Prose>;
+
+  const tabCls = (active: boolean) =>
+    `-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition ${
+      active
+        ? "border-brand-600 text-brand-700"
+        : "border-transparent text-slate-500 hover:text-slate-700"
+    }`;
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 flex gap-1 border-b border-slate-200">
+        <button onClick={() => setTab("idea")} className={tabCls(tab === "idea")}>
+          求解思路
+        </button>
+        <button onClick={() => setTab("sql")} className={tabCls(tab === "sql")}>
+          求解 SQL
+        </button>
+      </div>
+      {tab === "idea" ? <Prose>{idea}</Prose> : <Prose>{sql}</Prose>}
+    </div>
+  );
+}
