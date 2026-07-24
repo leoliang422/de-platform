@@ -134,6 +134,14 @@ class SubmissionService:
                 submission.processed_md = await self.llm.format_content(raw, submission.target_type)
             submission.status = "pending_review"
             submission.reject_reason = None
+            label = submission.title or (submission.extra or {}).get("company_name") or "新投稿"
+            await NotificationService(self.db).notify_admins(
+                type="submission_pending",
+                title="有新的投稿待审核",
+                body=f"{label} · 类型：{submission.target_type}",
+                link="/admin",
+                exclude_user_id=submission.user_id,
+            )
         except Exception as exc:  # noqa: BLE001 - 记录失败原因，避免卡在 processing
             logger.exception("投稿 %s 加工失败", submission_id)
             submission.status = "failed"

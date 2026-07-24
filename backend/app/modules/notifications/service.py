@@ -3,11 +3,12 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.models import Notification
 from app.modules.notifications.repository import NotificationRepository
+from app.modules.users.models import User
 
 
 class NotificationService:
@@ -32,6 +33,27 @@ class NotificationService:
         self.db.add(notification)
         await self.db.flush()
         return notification
+
+    async def notify_admins(
+        self,
+        *,
+        type: str,
+        title: str,
+        body: str | None = None,
+        link: str | None = None,
+        exclude_user_id: int | None = None,
+    ) -> int:
+        """给所有管理员各发一条站内通知（如新投稿待审、用户私信）。只 flush，由调用方 commit。"""
+        admin_ids = (
+            (await self.db.execute(select(User.id).where(User.role == "admin"))).scalars().all()
+        )
+        count = 0
+        for aid in admin_ids:
+            if exclude_user_id is not None and aid == exclude_user_id:
+                continue
+            await self.notify(user_id=aid, type=type, title=title, body=body, link=link)
+            count += 1
+        return count
 
     async def list(self, user_id: int) -> list[Notification]:
         return await self.repo.list_by_user(user_id)
