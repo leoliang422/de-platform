@@ -31,9 +31,10 @@ services:
       # 避免每次部署重复灌种子、覆盖运营改动、白占数据库容量。
       - key: SEED_ON_START
         value: "0"
-      # 注册邮箱验证码：生产开启（无 SMTP 时为 mock，验证码随响应返回并自动填入）。
+      # 注册邮箱验证码：默认关闭（仅账号+密码注册）。
+      # 未来接入真实 SMTP 后可置 "true" 启用真正的邮箱验证。
       - key: EMAIL_VERIFICATION_REQUIRED
-        value: "true"
+        value: "false"
       # 大模型：智谱 GLM（OpenAI 兼容）。抽取/补全用 glm-4-flash（免费、快）。
       # API Key 为敏感项，不入仓库：部署后在控制台 Environment 里填 LLM_API_KEY。
       - key: LLM_PROVIDER
