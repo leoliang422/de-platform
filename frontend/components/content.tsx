@@ -289,10 +289,17 @@ function renderMarkdown(md: string): ReactNode[] {
   return blocks;
 }
 
-export function Prose({ children }: { children: string }) {
+export function Prose({ children, bare = false }: { children: string; bare?: boolean }) {
   // 渲染 Markdown：标题/列表/代码块/加粗/行内代码/内嵌图片，避免原始符号刷屏。
+  // bare=true：不加灰底卡片与内边距，让正文与标题左对齐（文章式阅读）。
   return (
-    <div className="break-words rounded-lg bg-slate-50 p-4 font-sans text-sm text-slate-800 [&>*:first-child]:mt-0">
+    <div
+      className={
+        bare
+          ? "break-words font-sans text-sm text-slate-800 [&>*:first-child]:mt-0"
+          : "break-words rounded-lg bg-slate-50 p-4 font-sans text-sm text-slate-800 [&>*:first-child]:mt-0"
+      }
+    >
       {renderMarkdown(children)}
     </div>
   );

@@ -58,7 +58,7 @@ export default function KnowledgeDetailPage({
           ← 返回八股列表
         </Link>
         {(prev || next) && (
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-4 text-sm">
             {currentIndex >= 0 && siblings.length > 0 && (
               <span className="hidden text-xs text-slate-400 sm:inline">
                 {currentIndex + 1} / {siblings.length}
@@ -68,7 +68,7 @@ export default function KnowledgeDetailPage({
               <Link
                 href={`/knowledge/${prev.id}`}
                 title={prev.title}
-                className="rounded-lg border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-50"
+                className="text-brand-600 hover:underline"
               >
                 ← 上一个
               </Link>
@@ -77,7 +77,7 @@ export default function KnowledgeDetailPage({
               <Link
                 href={`/knowledge/${next.id}`}
                 title={next.title}
-                className="flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-brand-700 hover:bg-brand-100"
+                className="flex items-center gap-1 text-brand-600 hover:underline"
               >
                 下一个：
                 <span className="max-w-[9rem] truncate">{next.title}</span>
@@ -94,7 +94,7 @@ export default function KnowledgeDetailPage({
       ) : (
         <AnnotatedReader contentType="knowledge" contentId={item.id}>
           <h1 className="mb-4 text-2xl font-bold text-slate-900">{item.title}</h1>
-          <Prose>{item.content_md ?? ""}</Prose>
+          <Prose bare>{item.content_md ?? ""}</Prose>
           <ContentInteractions contentType="knowledge" contentId={item.id} />
         </AnnotatedReader>
       )}

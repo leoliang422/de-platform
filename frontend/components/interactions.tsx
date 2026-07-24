@@ -786,8 +786,7 @@ function AnnotationSidebar({
   return (
     <aside className="lg:sticky lg:top-4 lg:h-fit">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-base font-semibold text-slate-900">我的批注 ({tops.length})</h3>
-        <p className="mb-3 mt-0.5 text-xs text-slate-400">选中正文文字即可加注，仅自己可见、即时生效。</p>
+        <h3 className="mb-3 text-base font-semibold text-slate-900">我的批注 ({tops.length})</h3>
 
         {user ? (
           <div id="annotation-composer" className="mb-4">
@@ -828,9 +827,7 @@ function AnnotationSidebar({
           </p>
         )}
 
-        {tops.length === 0 ? (
-          <p className="text-sm text-slate-400">还没有批注（仅自己可见）。选中正文试试。</p>
-        ) : (
+        {tops.length > 0 && (
           <div className="space-y-3">
             {tops.map((n) => (
               <div
