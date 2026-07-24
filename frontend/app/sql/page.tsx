@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Empty, ErrorText, ListCard, Loading, PageHeader } from "@/components/content";
-import { getCategories, getSqlList, type CategoryNode, type SqlListItem } from "@/lib/api";
+import {
+  getAccessToken,
+  getCategories,
+  getSqlList,
+  type CategoryNode,
+  type SqlListItem,
+} from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const DIFF_COLOR: Record<string, string> = {
   easy: "bg-green-100 text-green-700",
@@ -13,11 +20,21 @@ const DIFF_COLOR: Record<string, string> = {
 
 const PAGE_SIZE = 20;
 
+type StatusFilter = "all" | "none" | "done" | "mastered";
+const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "none", label: "未做" },
+  { id: "done", label: "已做" },
+  { id: "mastered", label: "已掌握" },
+];
+
 export default function SqlPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<SqlListItem[]>([]);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +48,15 @@ export default function SqlPage() {
   useEffect(() => {
     setLoading(true);
     setPage(1); // 切换题型时回到第一页
-    getSqlList(activeCat ?? undefined)
+    getSqlList(activeCat ?? undefined, getAccessToken())
       .then(setItems)
       .catch(() => setError("无法加载题目，请确认后端已启动"))
       .finally(() => setLoading(false));
   }, [activeCat]);
+
+  useEffect(() => {
+    setPage(1); // 切换状态筛选/搜索时回到第一页
+  }, [statusFilter, query]);
 
   // 只取一级题型作为筛选项。
   const tabs = useMemo(
@@ -43,12 +64,17 @@ export default function SqlPage() {
     [categories],
   );
 
-  // 按标题搜索（客户端，忽略大小写与首尾空格）。
+  // 按标题搜索 + 做题状态筛选（客户端）。
   const filtered = useMemo(() => {
     const kw = query.trim().toLowerCase();
-    if (!kw) return items;
-    return items.filter((q) => q.title.toLowerCase().includes(kw));
-  }, [items, query]);
+    return items.filter((q) => {
+      if (kw && !q.title.toLowerCase().includes(kw)) return false;
+      if (statusFilter === "none" && q.my_status) return false;
+      if (statusFilter === "done" && q.my_status !== "done") return false;
+      if (statusFilter === "mastered" && q.my_status !== "mastered") return false;
+      return true;
+    });
+  }, [items, query, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -107,6 +133,24 @@ export default function SqlPage() {
             />
           </div>
 
+          {user && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setStatusFilter(s.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                    statusFilter === s.id
+                      ? "bg-brand-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {loading ? (
             <Loading />
           ) : error ? (
@@ -120,10 +164,22 @@ export default function SqlPage() {
               <div className="space-y-3">
                 {pageItems.map((q) => (
                   <ListCard key={q.id} href={`/sql/${q.id}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-900">{q.title}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        {q.my_status === "done" && (
+                          <span className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-700">
+                            已做
+                          </span>
+                        )}
+                        {q.my_status === "mastered" && (
+                          <span className="shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-[11px] text-green-700">
+                            已掌握
+                          </span>
+                        )}
+                        <span className="truncate font-medium text-slate-900">{q.title}</span>
+                      </span>
                       <span
-                        className={`rounded px-2 py-0.5 text-xs ${
+                        className={`shrink-0 rounded px-2 py-0.5 text-xs ${
                           DIFF_COLOR[q.difficulty] ?? "bg-slate-100 text-slate-600"
                         }`}
                       >
