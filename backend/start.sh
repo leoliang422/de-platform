@@ -7,6 +7,10 @@ set -euo pipefail
 echo "[start] 应用数据库迁移 alembic upgrade head"
 alembic upgrade head
 
+# 校正 Postgres 自增序列，避免历史/导入数据导致的主键冲突（如批注/评论插入报 500）。
+echo "[start] 校正数据库自增序列（Postgres；SQLite 自动跳过）"
+python -m scripts.fix_sequences || echo "[start] fix_sequences 跳过/失败（不阻塞启动）"
+
 # 首次部署可设 SEED_ON_START=1 灌入初始种子（幂等：已有分类则跳过内容，仅确保管理员账号）
 if [ "${SEED_ON_START:-0}" = "1" ]; then
   echo "[start] 灌入种子数据（幂等）"
