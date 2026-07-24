@@ -171,12 +171,8 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 题目：难度色条卡片；整题级门控，未授权时隐藏题干与解答 */}
-              <div
-                className={`overflow-hidden rounded-lg border-l-4 ${
-                  DIFF_BAR[item.difficulty] ?? "border-slate-300"
-                }`}
-              >
+              {/* 题目卡片；整题级门控，未授权时隐藏题干与解答 */}
+              <div className="overflow-hidden rounded-lg">
                 {accessible ? (
                   <Prose>{item.prompt_md}</Prose>
                 ) : (
@@ -289,12 +285,6 @@ const DIFFICULTY: Record<string, { label: string; cls: string }> = {
   easy: { label: "简单", cls: "bg-green-100 text-green-700" },
   medium: { label: "中等", cls: "bg-amber-100 text-amber-700" },
   hard: { label: "困难", cls: "bg-red-100 text-red-700" },
-};
-
-const DIFF_BAR: Record<string, string> = {
-  easy: "border-green-400",
-  medium: "border-amber-400",
-  hard: "border-red-400",
 };
 
 // 把答案 Markdown 拆成「求解思路」与「求解 SQL」两段（去掉各自的 ## 标题行）。
