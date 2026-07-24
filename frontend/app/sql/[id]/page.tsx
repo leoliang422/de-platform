@@ -171,20 +171,17 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 题目：难度色条卡片；整题级门控，未授权时隐藏题干与解答 */}
-              <div
-                className={`overflow-hidden rounded-lg border-l-4 ${
-                  DIFF_BAR[item.difficulty] ?? "border-slate-300"
-                }`}
-              >
-                {accessible ? (
+              {/* 题目卡片；整题级门控。已授权显示题干；未授权且仍在免费额度内显示锁定占位；
+                  额度用尽时不显示占位，仅在下方展示解锁面板。 */}
+              {accessible ? (
+                <div className="overflow-hidden rounded-lg">
                   <Prose>{item.prompt_md}</Prose>
-                ) : (
-                  <div className="bg-slate-50 p-8 text-center text-sm text-slate-500">
-                    🔒 本题内容已锁定，查看后可见题目与解答。
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : !quotaExhausted ? (
+                <div className="overflow-hidden rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">
+                  🔒 本题内容已锁定，查看后可见题目与解答。
+                </div>
+              ) : null}
 
               {/* 未授权：登录 / 解锁模块 / 查看本题（消耗 1 次免费额度，解锁整题） */}
               {!accessible && (
@@ -289,12 +286,6 @@ const DIFFICULTY: Record<string, { label: string; cls: string }> = {
   easy: { label: "简单", cls: "bg-green-100 text-green-700" },
   medium: { label: "中等", cls: "bg-amber-100 text-amber-700" },
   hard: { label: "困难", cls: "bg-red-100 text-red-700" },
-};
-
-const DIFF_BAR: Record<string, string> = {
-  easy: "border-green-400",
-  medium: "border-amber-400",
-  hard: "border-red-400",
 };
 
 // 把答案 Markdown 拆成「求解思路」与「求解 SQL」两段（去掉各自的 ## 标题行）。
