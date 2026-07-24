@@ -78,7 +78,7 @@ export default function SqlDetailPage({
       ) : (
         <>
           {/* 标题区 */}
-          <header className="mb-6 border-b border-slate-200 pb-4">
+          <header className="mb-4 border-b border-slate-200 pb-3">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">{item.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
@@ -107,11 +107,11 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 一、题目描述（含示例表与数据）——正文已含「## 一、题目描述」标题 */}
+              {/* 题目描述（含示例表与数据）——正文已含「## 题目描述」标题 */}
               <Prose>{item.prompt_md}</Prose>
 
-              {/* 二、三：求解思路 / 求解 SQL —— 门控展示 */}
-              <div className="my-5">
+              {/* 求解思路 / 求解 SQL —— 门控展示 */}
+              <div className="mt-3 mb-3">
                 {!user && item.answer_locked ? (
                   <p className="text-sm text-slate-500">
                     <Link href="/login" className="text-brand-600 hover:underline">
