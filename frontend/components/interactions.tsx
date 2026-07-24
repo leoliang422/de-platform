@@ -727,11 +727,17 @@ function AnnotationSidebar({
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submitTop() {
     const token = getAccessToken();
-    if (!token || !body.trim()) return;
+    if (!token) {
+      setError("请先登录后再添加批注");
+      return;
+    }
+    if (!body.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       await createAnnotation(token, contentType, contentId, body.trim(), {
         quote: pending?.quote ?? "",
@@ -740,6 +746,8 @@ function AnnotationSidebar({
       setBody("");
       onClearPending();
       onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存失败，请重试");
     } finally {
       setBusy(false);
     }
@@ -749,6 +757,7 @@ function AnnotationSidebar({
     const token = getAccessToken();
     if (!token || !replyBody.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       await createAnnotation(token, contentType, contentId, replyBody.trim(), {
         parentId,
@@ -756,6 +765,8 @@ function AnnotationSidebar({
       setReplyBody("");
       setReplyTo(null);
       onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "回复失败，请重试");
     } finally {
       setBusy(false);
     }
@@ -806,6 +817,7 @@ function AnnotationSidebar({
             >
               提交批注
             </button>
+            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
           </div>
         ) : (
           <p className="mb-4 text-sm text-slate-400">
