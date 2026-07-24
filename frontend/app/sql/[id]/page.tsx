@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
-import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
+import { ErrorText, Loading, Prose } from "@/components/content";
 import { ContentInteractions, PersonalNotes } from "@/components/interactions";
 import { SqlPlayground } from "@/components/sql-playground";
 import { ModuleUnlockPanel } from "@/components/unlock";
@@ -102,7 +102,35 @@ export default function SqlDetailPage({
 
   return (
     <div>
-      <BackLink href="/sql" label="返回 SQL 题库" />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link href="/sql" className="text-sm text-brand-600 hover:underline">
+          ← 返回 SQL 题库
+        </Link>
+        {(nav.prev || nav.next) && (
+          <div className="flex items-center gap-4 text-sm">
+            {nav.prev && (
+              <Link
+                href={`/sql/${nav.prev.id}`}
+                title={nav.prev.title}
+                className="text-brand-600 hover:underline"
+              >
+                ← 上一题
+              </Link>
+            )}
+            {nav.next && (
+              <Link
+                href={`/sql/${nav.next.id}`}
+                title={nav.next.title}
+                className="flex items-center gap-1 text-brand-600 hover:underline"
+              >
+                下一题：
+                <span className="max-w-[9rem] truncate">{nav.next.title}</span>
+                <span aria-hidden>→</span>
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
       {error ? (
         <ErrorText message={error} />
       ) : !item ? (
@@ -231,37 +259,6 @@ export default function SqlDetailPage({
                   </button>
                   {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
                 </div>
-              )}
-            </div>
-          )}
-
-          {(nav.prev || nav.next) && (
-            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
-              {nav.prev ? (
-                <Link
-                  href={`/sql/${nav.prev.id}`}
-                  className="group rounded-lg border border-slate-200 p-3 transition hover:border-brand-400 hover:bg-slate-50"
-                >
-                  <div className="text-xs text-slate-400">← 上一题</div>
-                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
-                    {nav.prev.title}
-                  </div>
-                </Link>
-              ) : (
-                <span />
-              )}
-              {nav.next ? (
-                <Link
-                  href={`/sql/${nav.next.id}`}
-                  className="group rounded-lg border border-slate-200 p-3 text-right transition hover:border-brand-400 hover:bg-slate-50"
-                >
-                  <div className="text-xs text-slate-400">下一题 →</div>
-                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
-                    {nav.next.title}
-                  </div>
-                </Link>
-              ) : (
-                <span />
               )}
             </div>
           )}
