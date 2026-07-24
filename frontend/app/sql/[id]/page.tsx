@@ -168,81 +168,72 @@ export default function SqlDetailPage({
             )}
           </header>
 
-          {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0">
-              {/* 题目卡片；整题级门控。已授权显示题干；未授权且仍在免费额度内显示锁定占位；
-                  额度用尽时不显示占位，仅在下方展示解锁面板。 */}
-              {accessible ? (
+          {accessible ? (
+            /* 已授权：左 题目+解答 ｜ 右 我的笔记（sticky 随手记） */
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-w-0">
                 <div className="overflow-hidden rounded-lg">
                   <Prose>{item.prompt_md}</Prose>
                 </div>
-              ) : !quotaExhausted ? (
-                <div className="overflow-hidden rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">
-                  🔒 本题内容已锁定，查看后可见题目与解答。
-                </div>
-              ) : null}
 
-              {/* 未授权：登录 / 解锁模块 / 查看本题（消耗 1 次免费额度，解锁整题） */}
-              {!accessible && (
-                <div className="mt-3">
-                  {!user ? (
-                    <p className="text-sm text-slate-500">
-                      <Link href="/login" className="text-brand-600 hover:underline">
-                        登录
-                      </Link>
-                      后可查看（每个模块免费查看 {item.free_limit} 条题目）。
-                    </p>
-                  ) : quotaExhausted ? (
-                    <ModuleUnlockPanel
-                      module="sql"
-                      freeUsed={item.free_used}
-                      freeLimit={item.free_limit}
-                      unlockPoints={item.unlock_points}
-                      onUnlocked={load}
-                    />
-                  ) : (
-                    <>
-                      <button
-                        onClick={handleReveal}
-                        disabled={busy}
-                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-                      >
-                        {item.module_unlocked
-                          ? "查看本题"
-                          : `查看本题（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
-                      </button>
-                      {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
-                    </>
-                  )}
+                <div className="mt-3 mb-3">
+                  <button
+                    onClick={() => setShowAnswer((v) => !v)}
+                    className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
+                  >
+                    {showAnswer ? "收起解答" : "查看求解思路与 SQL"}
+                  </button>
+                </div>
+
+                {showAnswer && item.answer_md && <AnswerTabs md={item.answer_md} />}
+
+                {PLAYGROUND_FIXTURES[item.title] && (
+                  <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
+                )}
+              </div>
+
+              <div className="lg:sticky lg:top-20 lg:self-start">
+                <PersonalNotes contentType="sql" contentId={item.id} />
+              </div>
+            </div>
+          ) : (
+            /* 未授权：居中限宽的门控卡片（登录 / 解锁模块 / 查看本题） */
+            <div className="mx-auto max-w-lg py-4">
+              {!user ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+                  🔒 本题内容已锁定。
+                  <Link href="/login" className="mx-1 font-medium text-brand-600 hover:underline">
+                    登录
+                  </Link>
+                  后可查看（每个模块免费查看 {item.free_limit} 条题目）。
+                </div>
+              ) : quotaExhausted ? (
+                <ModuleUnlockPanel
+                  module="sql"
+                  freeUsed={item.free_used}
+                  freeLimit={item.free_limit}
+                  unlockPoints={item.unlock_points}
+                  onUnlocked={load}
+                />
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center">
+                  <p className="mb-4 text-sm text-slate-500">
+                    🔒 本题内容已锁定，查看后可见题目与解答。
+                  </p>
+                  <button
+                    onClick={handleReveal}
+                    disabled={busy}
+                    className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {item.module_unlocked
+                      ? "查看本题"
+                      : `查看本题（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
+                  </button>
+                  {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
                 </div>
               )}
-
-              {/* 已授权：题干上方已显示；解答用本地开关切换（不再消耗额度） */}
-              {accessible && (
-                <>
-                  <div className="mt-3 mb-3">
-                    <button
-                      onClick={() => setShowAnswer((v) => !v)}
-                      className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
-                    >
-                      {showAnswer ? "收起解答" : "查看求解思路与 SQL"}
-                    </button>
-                  </div>
-
-                  {showAnswer && item.answer_md && <AnswerTabs md={item.answer_md} />}
-
-                  {PLAYGROUND_FIXTURES[item.title] && (
-                    <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
-                  )}
-                </>
-              )}
             </div>
-
-            <div className="lg:sticky lg:top-20 lg:self-start">
-              <PersonalNotes contentType="sql" contentId={item.id} />
-            </div>
-          </div>
+          )}
 
           {(nav.prev || nav.next) && (
             <div className="mt-6 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
