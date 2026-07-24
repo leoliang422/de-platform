@@ -59,13 +59,11 @@ def _q(
     idea: str,
     solution: str,
 ) -> dict[str, str]:
-    prompt_md = (
-        "## 一、题目描述\n\n" + desc.strip() + "\n\n**示例数据**\n\n" + sample.strip() + "\n"
-    )
+    prompt_md = "## 题目描述\n\n" + desc.strip() + "\n\n**示例数据**\n\n" + sample.strip() + "\n"
     answer_md = (
-        "## 二、求解思路\n\n"
+        "## 求解思路\n\n"
         + idea.strip()
-        + "\n\n## 三、求解 SQL（Hive / Spark SQL）\n\n"
+        + "\n\n## 求解 SQL（Hive / Spark SQL）\n\n"
         + solution.strip()
         + "\n"
     )
