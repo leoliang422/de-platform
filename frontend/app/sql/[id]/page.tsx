@@ -12,8 +12,10 @@ import {
   ApiError,
   getAccessToken,
   getSqlDetail,
+  getSqlList,
   revealSqlAnswer,
   type SqlDetail,
+  type SqlListItem,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -29,6 +31,10 @@ export default function SqlDetailPage({
   const [showAnswer, setShowAnswer] = useState(false);
   const [busy, setBusy] = useState(false);
   const [revealError, setRevealError] = useState<string | null>(null);
+  const [nav, setNav] = useState<{ prev: SqlListItem | null; next: SqlListItem | null }>({
+    prev: null,
+    next: null,
+  });
 
   const load = useCallback(() => {
     getSqlDetail(Number(id), getAccessToken())
@@ -39,6 +45,21 @@ export default function SqlDetailPage({
   useEffect(() => {
     load();
   }, [load]);
+
+  // 同题型内的上一题/下一题（列表按 id 倒序）。
+  useEffect(() => {
+    if (!item) return;
+    getSqlList(item.category_id ?? undefined)
+      .then((list) => {
+        const idx = list.findIndex((x) => x.id === item.id);
+        if (idx === -1) {
+          setNav({ prev: null, next: null });
+          return;
+        }
+        setNav({ prev: list[idx - 1] ?? null, next: list[idx + 1] ?? null });
+      })
+      .catch(() => setNav({ prev: null, next: null }));
+  }, [item?.id, item?.category_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const answerReady = !!item && item.answer_md != null && !item.answer_locked;
   const quotaExhausted =
@@ -164,6 +185,37 @@ export default function SqlDetailPage({
               <PersonalNotes contentType="sql" contentId={item.id} />
             </div>
           </div>
+
+          {(nav.prev || nav.next) && (
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+              {nav.prev ? (
+                <Link
+                  href={`/sql/${nav.prev.id}`}
+                  className="group rounded-lg border border-slate-200 p-3 transition hover:border-brand-400 hover:bg-slate-50"
+                >
+                  <div className="text-xs text-slate-400">← 上一题</div>
+                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
+                    {nav.prev.title}
+                  </div>
+                </Link>
+              ) : (
+                <span />
+              )}
+              {nav.next ? (
+                <Link
+                  href={`/sql/${nav.next.id}`}
+                  className="group rounded-lg border border-slate-200 p-3 text-right transition hover:border-brand-400 hover:bg-slate-50"
+                >
+                  <div className="text-xs text-slate-400">下一题 →</div>
+                  <div className="mt-0.5 truncate text-sm font-medium text-slate-700 group-hover:text-brand-700">
+                    {nav.next.title}
+                  </div>
+                </Link>
+              ) : (
+                <span />
+              )}
+            </div>
+          )}
 
           <ContentInteractions contentType="sql" contentId={item.id} />
         </>
