@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import { BackLink, ErrorText, Loading, Prose } from "@/components/content";
 import { ContentInteractions, PersonalNotes } from "@/components/interactions";
@@ -107,8 +107,14 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 题目描述（含示例表与数据）——正文已含「## 题目描述」标题 */}
-              <Prose>{item.prompt_md}</Prose>
+              {/* 题目描述：难度色条 + 卡片 */}
+              <div
+                className={`overflow-hidden rounded-lg border-l-4 ${
+                  DIFF_BAR[item.difficulty] ?? "border-slate-300"
+                }`}
+              >
+                <Prose>{item.prompt_md}</Prose>
+              </div>
 
               {/* 求解思路 / 求解 SQL —— 门控展示 */}
               <div className="mt-3 mb-3">
@@ -147,7 +153,7 @@ export default function SqlDetailPage({
                 />
               )}
 
-              {answerReady && showAnswer && <Prose>{item.answer_md ?? ""}</Prose>}
+              {answerReady && showAnswer && <AnswerTabs md={item.answer_md ?? ""} />}
 
               {PLAYGROUND_FIXTURES[item.title] && (
                 <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
@@ -171,3 +177,53 @@ const DIFFICULTY: Record<string, { label: string; cls: string }> = {
   medium: { label: "中等", cls: "bg-amber-100 text-amber-700" },
   hard: { label: "困难", cls: "bg-red-100 text-red-700" },
 };
+
+const DIFF_BAR: Record<string, string> = {
+  easy: "border-green-400",
+  medium: "border-amber-400",
+  hard: "border-red-400",
+};
+
+// 把答案 Markdown 拆成「求解思路」与「求解 SQL」两段（去掉各自的 ## 标题行）。
+function splitAnswer(md: string): { idea: string; sql: string } {
+  const marker = md.indexOf("## 求解 SQL");
+  if (marker === -1) return { idea: md.replace(/^##\s*求解思路\s*\n?/, "").trim(), sql: "" };
+  const idea = md
+    .slice(0, marker)
+    .replace(/^##\s*求解思路\s*\n?/, "")
+    .trim();
+  const sql = md
+    .slice(marker)
+    .replace(/^##[^\n]*\n?/, "")
+    .trim();
+  return { idea, sql };
+}
+
+// 解答区：求解思路 / 求解 SQL 分标签页切换。
+function AnswerTabs({ md }: { md: string }) {
+  const { idea, sql } = useMemo(() => splitAnswer(md), [md]);
+  const [tab, setTab] = useState<"idea" | "sql">("idea");
+
+  if (!sql) return <Prose>{md}</Prose>;
+
+  const tabCls = (active: boolean) =>
+    `-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition ${
+      active
+        ? "border-brand-600 text-brand-700"
+        : "border-transparent text-slate-500 hover:text-slate-700"
+    }`;
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 flex gap-1 border-b border-slate-200">
+        <button onClick={() => setTab("idea")} className={tabCls(tab === "idea")}>
+          求解思路
+        </button>
+        <button onClick={() => setTab("sql")} className={tabCls(tab === "sql")}>
+          求解 SQL
+        </button>
+      </div>
+      {tab === "idea" ? <Prose>{idea}</Prose> : <Prose>{sql}</Prose>}
+    </div>
+  );
+}
