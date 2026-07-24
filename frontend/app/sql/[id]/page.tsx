@@ -14,8 +14,10 @@ import {
   getSqlDetail,
   getSqlList,
   revealSqlAnswer,
+  setSqlProgress,
   type SqlDetail,
   type SqlListItem,
+  type SqlProgressStatus,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -89,6 +91,19 @@ export default function SqlDetailPage({
 
   const isAdmin = user?.role === "admin";
 
+  async function markProgress(target: "done" | "mastered") {
+    if (!item) return;
+    const token = getAccessToken();
+    if (!token) return;
+    const next: SqlProgressStatus = item.my_status === target ? "none" : target;
+    try {
+      const res = await setSqlProgress(token, item.id, next);
+      setItem((prev) => (prev ? { ...prev, my_status: res.my_status ?? null } : prev));
+    } catch {
+      // 忽略
+    }
+  }
+
   return (
     <div>
       <BackLink href="/sql" label="返回 SQL 题库" />
@@ -117,12 +132,44 @@ export default function SqlDetailPage({
                   #{t}
                 </span>
               ))}
+              {item.my_status === "done" && (
+                <span className="rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-700">已做</span>
+              )}
+              {item.my_status === "mastered" && (
+                <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                  已掌握
+                </span>
+              )}
               {isAdmin && (
                 <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">
                   管理员 · 无限查看
                 </span>
               )}
             </div>
+            {user && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => markProgress("done")}
+                  className={`rounded-lg border px-3 py-1 text-xs font-medium transition ${
+                    item.my_status === "done"
+                      ? "border-sky-400 bg-sky-50 text-sky-700"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.my_status === "done" ? "✓ 已做" : "标记已做"}
+                </button>
+                <button
+                  onClick={() => markProgress("mastered")}
+                  className={`rounded-lg border px-3 py-1 text-xs font-medium transition ${
+                    item.my_status === "mastered"
+                      ? "border-green-400 bg-green-50 text-green-700"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.my_status === "mastered" ? "✓ 已掌握" : "标记已掌握"}
+                </button>
+              </div>
+            )}
           </header>
 
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
