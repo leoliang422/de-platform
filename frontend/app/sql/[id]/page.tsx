@@ -173,7 +173,7 @@ export default function SqlDetailPage({
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0">
                 <div className="overflow-hidden rounded-lg">
-                  <Prose>{item.prompt_md}</Prose>
+                  <Prose bare>{item.prompt_md}</Prose>
                 </div>
 
                 <div className="mt-3 mb-3">
@@ -299,7 +299,7 @@ function AnswerTabs({ md }: { md: string }) {
   const { idea, sql } = useMemo(() => splitAnswer(md), [md]);
   const [tab, setTab] = useState<"idea" | "sql">("idea");
 
-  if (!sql) return <Prose>{md}</Prose>;
+  if (!sql) return <Prose bare>{md}</Prose>;
 
   const tabCls = (active: boolean) =>
     `-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition ${
@@ -318,7 +318,7 @@ function AnswerTabs({ md }: { md: string }) {
           求解 SQL
         </button>
       </div>
-      {tab === "idea" ? <Prose>{idea}</Prose> : <Prose>{sql}</Prose>}
+      {tab === "idea" ? <Prose bare>{idea}</Prose> : <Prose bare>{sql}</Prose>}
     </div>
   );
 }
