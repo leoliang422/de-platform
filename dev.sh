@@ -81,6 +81,8 @@ if [ "$FRESH" = "1" ]; then
 fi
 log "应用数据库迁移（alembic upgrade head）"
 .venv/bin/alembic upgrade head
+log "校正数据库自增序列（Postgres；SQLite 自动跳过）"
+PYTHONPATH="$BACKEND" .venv/bin/python -m scripts.fix_sequences
 log "灌入种子数据（幂等）"
 PYTHONPATH="$BACKEND" .venv/bin/python -m scripts.seed
 log "灌入 SQL 题库（幂等 upsert）"
