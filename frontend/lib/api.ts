@@ -730,7 +730,7 @@ export type SqlProgressStatus = "none" | "done" | "mastered";
 export interface SqlDetail extends SqlListItem {
   prompt_md: string;
   answer_md: string | null;
-  answer_locked: boolean;
+  locked: boolean; // 整题是否锁定（题目级免费额度用尽且未解锁）
   module_unlocked: boolean;
   free_used: number;
   free_limit: number;

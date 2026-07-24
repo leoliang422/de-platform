@@ -63,16 +63,13 @@ export default function SqlDetailPage({
       .catch(() => setNav({ prev: null, next: null }));
   }, [item?.id, item?.category_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const answerReady = !!item && item.answer_md != null && !item.answer_locked;
+  const accessible = !!item && !item.locked;
   const quotaExhausted =
-    !!item && item.answer_locked && !item.module_unlocked && item.free_used >= item.free_limit;
+    !!item && item.locked && !item.module_unlocked && item.free_used >= item.free_limit;
 
-  async function handleShowAnswer() {
+  // 「查看本题」：题目级门控——消耗一次免费额度，解锁整题（题干+解答）。
+  async function handleReveal() {
     if (!item) return;
-    if (answerReady) {
-      setShowAnswer((v) => !v);
-      return;
-    }
     const token = getAccessToken();
     if (!token) return;
     setBusy(true);
@@ -81,7 +78,6 @@ export default function SqlDetailPage({
       const next = await revealSqlAnswer(token, item.id);
       setItem(next);
       await refreshUser();
-      if (!next.answer_locked) setShowAnswer(true);
     } catch (err) {
       setRevealError(err instanceof ApiError ? err.message : "解锁失败");
     } finally {
@@ -175,56 +171,74 @@ export default function SqlDetailPage({
           {/* 左：题目描述 + 求解思路/SQL ｜ 右：我的笔记（随手记，sticky 跟随滚动） */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
-              {/* 题目描述：难度色条 + 卡片 */}
+              {/* 题目：难度色条卡片；整题级门控，未授权时隐藏题干与解答 */}
               <div
                 className={`overflow-hidden rounded-lg border-l-4 ${
                   DIFF_BAR[item.difficulty] ?? "border-slate-300"
                 }`}
               >
-                <Prose>{item.prompt_md}</Prose>
-              </div>
-
-              {/* 求解思路 / 求解 SQL —— 门控展示 */}
-              <div className="mt-3 mb-3">
-                {!user && item.answer_locked ? (
-                  <p className="text-sm text-slate-500">
-                    <Link href="/login" className="text-brand-600 hover:underline">
-                      登录
-                    </Link>
-                    后可查看解答（每个模块免费查看 {item.free_limit} 条）。
-                  </p>
-                ) : quotaExhausted ? null : (
-                  <button
-                    onClick={handleShowAnswer}
-                    disabled={busy}
-                    className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    {answerReady
-                      ? showAnswer
-                        ? "收起解答"
-                        : "查看求解思路与 SQL"
-                      : item.module_unlocked
-                        ? "查看求解思路与 SQL"
-                        : `查看解答（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
-                  </button>
+                {accessible ? (
+                  <Prose>{item.prompt_md}</Prose>
+                ) : (
+                  <div className="bg-slate-50 p-8 text-center text-sm text-slate-500">
+                    🔒 本题内容已锁定，查看后可见题目与解答。
+                  </div>
                 )}
-                {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
               </div>
 
-              {quotaExhausted && (
-                <ModuleUnlockPanel
-                  module="sql"
-                  freeUsed={item.free_used}
-                  freeLimit={item.free_limit}
-                  unlockPoints={item.unlock_points}
-                  onUnlocked={load}
-                />
+              {/* 未授权：登录 / 解锁模块 / 查看本题（消耗 1 次免费额度，解锁整题） */}
+              {!accessible && (
+                <div className="mt-3">
+                  {!user ? (
+                    <p className="text-sm text-slate-500">
+                      <Link href="/login" className="text-brand-600 hover:underline">
+                        登录
+                      </Link>
+                      后可查看（每个模块免费查看 {item.free_limit} 条题目）。
+                    </p>
+                  ) : quotaExhausted ? (
+                    <ModuleUnlockPanel
+                      module="sql"
+                      freeUsed={item.free_used}
+                      freeLimit={item.free_limit}
+                      unlockPoints={item.unlock_points}
+                      onUnlocked={load}
+                    />
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleReveal}
+                        disabled={busy}
+                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {item.module_unlocked
+                          ? "查看本题"
+                          : `查看本题（免费剩 ${Math.max(0, item.free_limit - item.free_used)} 条）`}
+                      </button>
+                      {revealError && <p className="mt-2 text-sm text-red-600">{revealError}</p>}
+                    </>
+                  )}
+                </div>
               )}
 
-              {answerReady && showAnswer && <AnswerTabs md={item.answer_md ?? ""} />}
+              {/* 已授权：题干上方已显示；解答用本地开关切换（不再消耗额度） */}
+              {accessible && (
+                <>
+                  <div className="mt-3 mb-3">
+                    <button
+                      onClick={() => setShowAnswer((v) => !v)}
+                      className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
+                    >
+                      {showAnswer ? "收起解答" : "查看求解思路与 SQL"}
+                    </button>
+                  </div>
 
-              {PLAYGROUND_FIXTURES[item.title] && (
-                <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
+                  {showAnswer && item.answer_md && <AnswerTabs md={item.answer_md} />}
+
+                  {PLAYGROUND_FIXTURES[item.title] && (
+                    <SqlPlayground fixture={PLAYGROUND_FIXTURES[item.title]} />
+                  )}
+                </>
               )}
             </div>
 

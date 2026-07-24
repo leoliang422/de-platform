@@ -45,11 +45,12 @@ async def _make_sql(db: AsyncSession, n: int) -> list[int]:
     return ids
 
 
-async def test_sql_answer_locked_for_anonymous(client: AsyncClient, db: AsyncSession) -> None:
+async def test_sql_locked_for_anonymous(client: AsyncClient, db: AsyncSession) -> None:
     [qid] = await _make_sql(db, 1)
     detail = (await client.get(f"/sql-questions/{qid}")).json()
-    assert detail["prompt_md"] == "题干0"
-    assert detail["answer_locked"] is True
+    # 题目级门控：匿名用户题干与答案都不可见
+    assert detail["locked"] is True
+    assert detail["prompt_md"] == ""
     assert detail["answer_md"] is None
 
 
@@ -63,17 +64,17 @@ async def test_sql_free_quota_then_module_unlock(client: AsyncClient, db: AsyncS
         r = await client.post(f"/sql-questions/{qid}/reveal", headers=_auth(token))
         assert r.status_code == 200
         body = r.json()
-        assert body["answer_locked"] is False
+        assert body["locked"] is False
         assert body["answer_md"] == f"答案{i}"
         assert body["free_used"] == i + 1
 
     # 已查看过的条目再次 GET 详情仍可见（永久有效）
     seen = (await client.get(f"/sql-questions/{ids[0]}", headers=_auth(token))).json()
-    assert seen["answer_locked"] is False
+    assert seen["locked"] is False
 
     # 第 11 条：超出免费额度 → 锁定
     r = await client.post(f"/sql-questions/{ids[10]}/reveal", headers=_auth(token))
-    assert r.json()["answer_locked"] is True
+    assert r.json()["locked"] is True
     assert r.json()["answer_md"] is None
 
     # 解锁整个 SQL 模块
@@ -84,9 +85,9 @@ async def test_sql_free_quota_then_module_unlock(client: AsyncClient, db: AsyncS
 
     # 解锁后第 11、12 条均可见
     r = await client.post(f"/sql-questions/{ids[10]}/reveal", headers=_auth(token))
-    assert r.json()["answer_locked"] is False
+    assert r.json()["locked"] is False
     r = await client.get(f"/sql-questions/{ids[11]}", headers=_auth(token))
-    assert r.json()["answer_locked"] is False
+    assert r.json()["locked"] is False
 
     summary = (await client.get("/access/sql", headers=_auth(token))).json()
     assert summary["unlocked"] is True
