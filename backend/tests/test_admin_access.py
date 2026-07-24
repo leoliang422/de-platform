@@ -57,7 +57,7 @@ async def test_admin_bypasses_free_quota(client: AsyncClient, db: AsyncSession) 
         await db.execute(select(SqlQuestion.id).where(SqlQuestion.title == "admin题0"))
     ).scalar_one()
     detail = (await client.get(f"/sql-questions/{qid}", headers=_auth(admin_token))).json()
-    assert detail["answer_locked"] is False
+    assert detail["locked"] is False
     assert detail["answer_md"] == "答案0"
 
 

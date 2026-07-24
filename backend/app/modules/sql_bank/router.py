@@ -38,15 +38,18 @@ async def list_questions(
 def _detail(
     item: SqlQuestion,
     *,
-    answer_visible: bool,
+    visible: bool,
     module_unlocked: bool,
     free_used: int,
     free_limit: int,
     unlock_points: int,
 ) -> SqlQuestionDetail:
     detail = SqlQuestionDetail.model_validate(item)
-    detail.answer_md = item.answer_md if answer_visible else None
-    detail.answer_locked = not answer_visible
+    # 题目级门控：未获授权时题干与答案都隐藏。
+    if not visible:
+        detail.prompt_md = ""
+        detail.answer_md = None
+    detail.locked = not visible
     detail.module_unlocked = module_unlocked
     detail.free_used = free_used
     detail.free_limit = free_limit
@@ -69,7 +72,7 @@ async def get_question(
     summary = await access.summary(user, "sql")
     detail = _detail(
         item,
-        answer_visible=visible,
+        visible=visible,
         module_unlocked=summary.unlocked,
         free_used=summary.free_used,
         free_limit=summary.free_limit,
@@ -110,11 +113,13 @@ async def reveal_answer(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="题目不存在")
 
     state = await AccessService(db).reveal(current_user, "sql", item.id, item.author_id)
-    return _detail(
+    detail = _detail(
         item,
-        answer_visible=state.granted,
+        visible=state.granted,
         module_unlocked=state.module_unlocked,
         free_used=state.free_used,
         free_limit=state.free_limit,
         unlock_points=state.unlock_points,
     )
+    detail.my_status = await SqlQuestionRepository(db).get_progress(current_user.id, item.id)
+    return detail
