@@ -67,13 +67,18 @@ class ContactMessageService:
             attachment_kind=data.attachment_kind,
         )
         self.db.add(msg)
+        await NotificationService(self.db).notify_admins(
+            type="contact_message",
+            title="收到用户私信",
+            body=data.body.strip()[:50],
+            link="/admin",
+            exclude_user_id=user_id,
+        )
         await self.db.commit()
         await self.db.refresh(msg)
         return msg
 
-    async def delete_message(
-        self, message_id: int, *, requester_id: int, is_admin: bool
-    ) -> None:
+    async def delete_message(self, message_id: int, *, requester_id: int, is_admin: bool) -> None:
         """删除单条私信。管理员可删会话内任意消息；普通用户仅能撤回自己发出的消息。"""
         msg = await self.db.get(ContactMessage, message_id)
         if msg is None:
@@ -103,8 +108,7 @@ class ContactMessageService:
 
         # 会话状态（置顶/屏蔽）：即使会话被清空、无消息，只要有状态也应保留在列表里。
         states = {
-            s.user_id: s
-            for s in (await self.db.execute(select(ConversationState))).scalars().all()
+            s.user_id: s for s in (await self.db.execute(select(ConversationState))).scalars().all()
         }
         user_ids = set(last_by_user) | set(states)
         if not user_ids:
@@ -159,19 +163,13 @@ class ContactMessageService:
 
     async def clear_conversation(self, user_id: int) -> None:
         """清空聊天：删除该会话全部消息，但保留会话（置顶/屏蔽状态不变）。"""
-        await self.db.execute(
-            delete(ContactMessage).where(ContactMessage.user_id == user_id)
-        )
+        await self.db.execute(delete(ContactMessage).where(ContactMessage.user_id == user_id))
         await self.db.commit()
 
     async def delete_conversation(self, user_id: int) -> None:
         """删除聊天：删除全部消息并移除会话状态，会话从列表消失。"""
-        await self.db.execute(
-            delete(ContactMessage).where(ContactMessage.user_id == user_id)
-        )
-        await self.db.execute(
-            delete(ConversationState).where(ConversationState.user_id == user_id)
-        )
+        await self.db.execute(delete(ContactMessage).where(ContactMessage.user_id == user_id))
+        await self.db.execute(delete(ConversationState).where(ConversationState.user_id == user_id))
         await self.db.commit()
 
     async def admin_unread_total(self) -> int:
