@@ -722,7 +722,10 @@ export interface SqlListItem {
   title: string;
   difficulty: string;
   tags: string[];
+  my_status?: string | null; // null=未做 | done=已做 | mastered=已掌握
 }
+
+export type SqlProgressStatus = "none" | "done" | "mastered";
 
 export interface SqlDetail extends SqlListItem {
   prompt_md: string;
@@ -734,9 +737,23 @@ export interface SqlDetail extends SqlListItem {
   unlock_points: number;
 }
 
-export function getSqlList(categoryId?: number): Promise<SqlListItem[]> {
+export function getSqlList(
+  categoryId?: number,
+  token?: string | null,
+): Promise<SqlListItem[]> {
   const q = categoryId != null ? `?category_id=${categoryId}` : "";
-  return request<SqlListItem[]>(`/sql-questions${q}`);
+  return request<SqlListItem[]>(`/sql-questions${q}`, maybeAuth(token));
+}
+
+export function setSqlProgress(
+  token: string,
+  id: number,
+  status: SqlProgressStatus,
+): Promise<SqlListItem> {
+  return authRequest<SqlListItem>(`/sql-questions/${id}/progress`, token, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export function getSqlDetail(id: number, token?: string | null): Promise<SqlDetail> {

@@ -32,6 +32,6 @@ from app.modules.payment.models import Entitlement, Order  # noqa: F401
 from app.modules.points.models import PointLedger  # noqa: F401
 from app.modules.projects.models import Project, ProjectQA  # noqa: F401
 from app.modules.settings.models import SiteSetting  # noqa: F401
-from app.modules.sql_bank.models import SqlQuestion  # noqa: F401
+from app.modules.sql_bank.models import SqlProgress, SqlQuestion  # noqa: F401
 from app.modules.submissions.models import Submission  # noqa: F401
 from app.modules.users.models import User  # noqa: F401
