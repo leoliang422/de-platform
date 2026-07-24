@@ -27,9 +27,13 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
-      # 首次部署灌种子（含管理员 admin@example.com / admin12345），之后可改为 0
+      # 种子灌入：首次部署用 "1" 建管理员/初始内容；已上线后置 "0"，
+      # 避免每次部署重复灌种子、覆盖运营改动、白占数据库容量。
       - key: SEED_ON_START
-        value: "1"
+        value: "0"
+      # 注册邮箱验证码：生产开启（无 SMTP 时为 mock，验证码随响应返回并自动填入）。
+      - key: EMAIL_VERIFICATION_REQUIRED
+        value: "true"
       # 大模型：智谱 GLM（OpenAI 兼容）。抽取/补全用 glm-4-flash（免费、快）。
       # API Key 为敏感项，不入仓库：部署后在控制台 Environment 里填 LLM_API_KEY。
       - key: LLM_PROVIDER

@@ -5,6 +5,18 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     nickname: str = Field(min_length=1, max_length=50)
+    # 邮箱验证码：仅当 EMAIL_VERIFICATION_REQUIRED=true 时校验；否则忽略（向后兼容）。
+    code: str | None = None
+
+
+class SendEmailCodeIn(BaseModel):
+    email: EmailStr
+
+
+class SendEmailCodeOut(BaseModel):
+    sent: bool = True
+    # 仅 mock 邮件通道下返回，便于无 SMTP 时自测/自动填入；真实 SMTP 通道为 None。
+    dev_code: str | None = None
 
 
 class LoginIn(BaseModel):

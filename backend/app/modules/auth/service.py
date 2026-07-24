@@ -11,13 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_password
-from app.modules.auth.models import PasswordResetToken
+from app.modules.auth.models import EmailVerificationCode, PasswordResetToken
 from app.modules.auth.schemas import (
     ForgotPasswordIn,
     ForgotPasswordOut,
     LoginIn,
     RegisterIn,
     ResetPasswordIn,
+    SendEmailCodeIn,
+    SendEmailCodeOut,
 )
 from app.modules.mail.sender import get_email_sender
 from app.modules.users.models import User
@@ -37,7 +39,64 @@ class AuthService:
         self.db = db
         self.users = UserRepository(db)
 
+    async def send_registration_code(self, data: SendEmailCodeIn) -> SendEmailCodeOut:
+        """发送注册邮箱验证码。不泄露邮箱是否已注册（都返回 sent=True）。"""
+        settings = get_settings()
+        out = SendEmailCodeOut(sent=True)
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        ttl = dt.timedelta(minutes=settings.email_code_ttl_minutes)
+        record = EmailVerificationCode(
+            email=data.email.lower(),
+            code_hash=_hash_token(code),
+            expires_at=dt.datetime.now(dt.UTC) + ttl,
+        )
+        self.db.add(record)
+        await self.db.commit()
+
+        sender = get_email_sender()
+        try:
+            await sender.send(
+                to=data.email,
+                subject="你的 DE Platform 注册验证码",
+                body=(
+                    f"你的注册验证码是：{code}\n"
+                    f"{settings.email_code_ttl_minutes} 分钟内有效。若非本人操作请忽略。"
+                ),
+            )
+        except Exception:  # noqa: BLE001 - 发信失败不应暴露给调用方
+            logger.exception("发送注册验证码失败 email=%s", data.email)
+
+        if sender.name == "mock":
+            out.dev_code = code  # 无真实 SMTP 时便于自测/前端自动填入
+        return out
+
+    async def _consume_email_code(self, email: str, code: str | None) -> None:
+        if not code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="请先获取并填写邮箱验证码"
+            )
+        result = await self.db.execute(
+            select(EmailVerificationCode)
+            .where(
+                EmailVerificationCode.email == email.lower(),
+                EmailVerificationCode.code_hash == _hash_token(code),
+            )
+            .order_by(EmailVerificationCode.id.desc())
+        )
+        record = result.scalars().first()
+        now = dt.datetime.now(dt.UTC)
+        expires_at = record.expires_at if record else None
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=dt.UTC)
+        if record is None or record.used_at is not None or expires_at is None or expires_at < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误或已过期"
+            )
+        record.used_at = now
+
     async def register(self, data: RegisterIn) -> User:
+        if get_settings().email_verification_required:
+            await self._consume_email_code(data.email, data.code)
         if await self.users.get_by_email(data.email):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已注册")
         user = User(

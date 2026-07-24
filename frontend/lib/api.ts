@@ -36,14 +36,51 @@ export class ApiError extends Error {
   }
 }
 
+// 请求超时（毫秒）。免费后端冷启动 + 大模型解析可能较慢，给足够但有限的时间，
+// 避免请求无限期挂起、浏览器与服务器连接被长时间占用。
+const REQUEST_TIMEOUT_MS = 60000;
+
+// 给裸 fetch（上传 / 解析等 multipart 请求）加超时，避免大模型解析卡住时无限挂起。
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(408, "请求超时，请稍后重试（服务器可能在唤醒或处理较慢）");
+    }
+    throw new ApiError(0, "网络异常，请检查连接后重试");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(408, "请求超时，请稍后重试（服务器可能在唤醒或处理较慢）");
+    }
+    throw new ApiError(0, "网络异常，请检查连接后重试");
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     let detail = `请求失败 (${res.status})`;
@@ -74,10 +111,20 @@ export function register(input: {
   email: string;
   password: string;
   nickname: string;
+  code?: string;
 }): Promise<UserProfile> {
   return request<UserProfile>("/auth/register", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function sendEmailCode(
+  email: string,
+): Promise<{ sent: boolean; dev_code: string | null }> {
+  return request<{ sent: boolean; dev_code: string | null }>("/auth/send-email-code", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 
@@ -425,7 +472,7 @@ export function adminDeleteConversation(token: string, userId: number): Promise<
 export async function uploadImage(token: string, file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/files/images`, {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/files/images`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -452,7 +499,7 @@ export interface AttachmentUpload {
 export async function uploadAttachment(token: string, file: File): Promise<AttachmentUpload> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/files/attachment`, {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/files/attachment`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -481,11 +528,15 @@ export interface ExtractResult {
 export async function extractFile(token: string, file: File): Promise<ExtractResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/files/extract`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/files/extract`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    },
+    90000,
+  );
   if (!res.ok) {
     let detail = `解析失败 (${res.status})`;
     try {
@@ -512,11 +563,15 @@ export async function parseSubmission(
   form.append("target_type", input.targetType);
   if (input.text) form.append("text", input.text);
   if (input.file) form.append("file", input.file);
-  const res = await fetch(`${API_BASE_URL}/submissions/parse`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/submissions/parse`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    },
+    90000,
+  );
   if (!res.ok) {
     let detail = `解析失败 (${res.status})`;
     try {

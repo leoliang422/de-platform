@@ -10,7 +10,10 @@ from app.modules.applications.models import (  # noqa: F401
     ApplicationRecord,
     CalendarEvent,
 )
-from app.modules.auth.models import PasswordResetToken  # noqa: F401
+from app.modules.auth.models import (  # noqa: F401
+    EmailVerificationCode,
+    PasswordResetToken,
+)
 from app.modules.catalog.models import Category  # noqa: F401
 from app.modules.files.models import StoredFile  # noqa: F401
 from app.modules.interactions.models import (  # noqa: F401

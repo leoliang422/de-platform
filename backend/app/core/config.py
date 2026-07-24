@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # mock：不真正发信，仅记录日志（本地/演示默认，找回密码返回 dev token 便于自测）。
     # smtp：真实 SMTP；凭证未配齐时自动回退 mock。获取方式见 docs/deployment.md「邮件发送」。
     email_provider: str = "mock"
+    # 注册是否需要邮箱验证码。默认 False（不影响既有流程/测试）；生产在 render.yaml 置 true。
+    # mock 邮件通道下，验证码会随 /auth/send-email-code 响应返回（dev_code），前端自动填入；
+    # 接入真实 SMTP 后不再返回，变为真正的邮箱校验。
+    email_verification_required: bool = False
+    # 注册验证码有效期（分钟）。
+    email_code_ttl_minutes: int = 10
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

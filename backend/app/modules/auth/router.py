@@ -11,6 +11,8 @@ from app.modules.auth.schemas import (
     RefreshIn,
     RegisterIn,
     ResetPasswordIn,
+    SendEmailCodeIn,
+    SendEmailCodeOut,
     TokenPair,
 )
 from app.modules.auth.service import AuthService
@@ -24,6 +26,13 @@ def _issue_tokens(user_id: int) -> TokenPair:
         access_token=create_access_token(user_id),
         refresh_token=create_refresh_token(user_id),
     )
+
+
+@router.post("/send-email-code", response_model=SendEmailCodeOut)
+async def send_email_code(
+    data: SendEmailCodeIn, db: AsyncSession = Depends(get_db)
+) -> SendEmailCodeOut:
+    return await AuthService(db).send_registration_code(data)
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
